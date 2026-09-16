@@ -1,38 +1,47 @@
 import SwiftUI
+import VisionKit
 
 public struct MainScannerView: View {
-    @StateObject private var cameraManager = CameraManager()
     @AppStorage("defaultCountryPrefix") private var defaultCountryPrefix: String = "+212"
 
+    @State private var detectedNumbers: [RecognizedNumber] = []
     @State private var selectedNumber: RecognizedNumber?
-    @State private var showSettings = false
+    @State private var isScanning: Bool = true
+    @State private var isTorchOn: Bool = false
+    @State private var zoomFactor: CGFloat = 1.0
+    @State private var showSettings: Bool = false
+
+    private var isScannerAvailable: Bool {
+        DataScannerViewController.isSupported && DataScannerViewController.isAvailable
+    }
 
     public init() {}
 
     public var body: some View {
         ZStack {
-            // Camera Background
             Color.black.ignoresSafeArea()
 
-            if cameraManager.hasCameraPermission {
-                CameraPreviewView(session: cameraManager.captureSession) { previewLayer in
-                    cameraManager.previewLayer = previewLayer
-                }
+            if isScannerAvailable {
+                // Apple's Native VisionKit Live Text Camera
+                DataScannerView(
+                    detectedNumbers: $detectedNumbers,
+                    isScanning: $isScanning,
+                    isTorchOn: $isTorchOn,
+                    zoomFactor: $zoomFactor,
+                    onSelectNumber: { number in
+                        selectedNumber = number
+                    }
+                )
                 .ignoresSafeArea()
-
-                // Fixed Underline Overlay directly tracking the document text
-                ScannerOverlayView(numbers: cameraManager.detectedNumbers) { number in
-                    selectedNumber = number
-                }
             } else {
                 VStack(spacing: 16) {
                     Image(systemName: "camera.fill")
                         .font(.system(size: 60))
                         .foregroundColor(.gray)
-                    Text("Camera Access Required")
+                    Text("Live Text Scanner Unavailable")
                         .font(.headline)
                         .foregroundColor(.white)
-                    Text("Please enable camera access in Settings to scan phone numbers.")
+                    Text("Please grant camera permissions in iOS Settings.")
                         .font(.subheadline)
                         .foregroundColor(.gray)
                         .multilineTextAlignment(.center)
@@ -40,16 +49,16 @@ public struct MainScannerView: View {
                 }
             }
 
-            // Top Bar Controls
+            // Top Controls Bar
             VStack {
                 HStack {
-                    // Flashlight / Torch Button
+                    // Torch Button
                     Button(action: {
-                        cameraManager.toggleTorch()
+                        isTorchOn.toggle()
                     }) {
-                        Image(systemName: cameraManager.isTorchOn ? "flashlight.on.fill" : "flashlight.off.fill")
+                        Image(systemName: isTorchOn ? "flashlight.on.fill" : "flashlight.off.fill")
                             .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(cameraManager.isTorchOn ? .yellow : .white)
+                            .foregroundColor(isTorchOn ? .yellow : .white)
                             .frame(width: 44, height: 44)
                             .background(Color.black.opacity(0.6))
                             .clipShape(Circle())
@@ -57,7 +66,7 @@ public struct MainScannerView: View {
 
                     Spacer()
 
-                    // Country Prefix Badge / Settings
+                    // Country Prefix Indicator
                     Button(action: {
                         showSettings = true
                     }) {
@@ -65,9 +74,9 @@ public struct MainScannerView: View {
                             Image(systemName: "globe")
                                 .font(.system(size: 12))
                             Text(defaultCountryPrefix.isEmpty ? "+212" : defaultCountryPrefix)
-                                .font(.system(size: 13, weight: .bold))
+                                .font(.system(size: 14, weight: .bold))
                         }
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, 14)
                         .padding(.vertical, 8)
                         .background(Color.black.opacity(0.6))
                         .foregroundColor(.white)
@@ -76,13 +85,13 @@ public struct MainScannerView: View {
 
                     Spacer()
 
-                    // Pause / Freeze Frame Button
+                    // Freeze / Resume Scanning Button
                     Button(action: {
-                        cameraManager.togglePause()
+                        isScanning.toggle()
                     }) {
-                        Image(systemName: cameraManager.isPaused ? "play.fill" : "pause.fill")
+                        Image(systemName: isScanning ? "pause.fill" : "play.fill")
                             .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(cameraManager.isPaused ? .orange : .white)
+                            .foregroundColor(isScanning ? .white : .orange)
                             .frame(width: 44, height: 44)
                             .background(Color.black.opacity(0.6))
                             .clipShape(Circle())
@@ -91,74 +100,86 @@ public struct MainScannerView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 50)
 
-                if cameraManager.isPaused {
-                    Text("FRAME FROZEN — TAP ANY NUMBER")
-                        .font(.caption2.bold())
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Color.orange.opacity(0.9))
+                if !isScanning {
+                    Text("SCANNER PAUSED — TAP ANY NUMBER")
+                        .font(.caption.bold())
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(Color.orange.opacity(0.95))
                         .foregroundColor(.black)
-                        .cornerRadius(6)
-                        .padding(.top, 4)
+                        .cornerRadius(8)
+                        .padding(.top, 6)
                 }
 
                 Spacer()
 
-                // Bottom Zoom Controls (iPhone 15 Pro Max) & Scanned Quick Action
+                // Bottom Multi-Number Selection Carousel & Zoom Presets
                 VStack(spacing: 14) {
-                    // Zoom Presets: 0.5x (Macro), 1x, 2x, 5x
+                    // Zoom Presets
                     HStack(spacing: 16) {
-                        ForEach(CameraManager.ZoomPreset.allCases) { preset in
+                        ForEach([1.0, 2.0, 3.0], id: \.self) { factor in
                             Button(action: {
-                                cameraManager.setZoomPreset(preset)
+                                zoomFactor = factor
                             }) {
-                                Text(preset.rawValue)
+                                Text("\(Int(factor))x")
                                     .font(.system(size: 13, weight: .bold))
-                                    .frame(width: 44, height: 44)
-                                    .background(cameraManager.currentZoomPreset == preset ? Color.yellow : Color.black.opacity(0.65))
-                                    .foregroundColor(cameraManager.currentZoomPreset == preset ? .black : .white)
+                                    .frame(width: 42, height: 42)
+                                    .background(zoomFactor == factor ? Color.yellow : Color.black.opacity(0.65))
+                                    .foregroundColor(zoomFactor == factor ? .black : .white)
                                     .clipShape(Circle())
                             }
                         }
                     }
 
-                    // Bottom Drawer Card for Detected Number
-                    if let latestNumber = cameraManager.detectedNumbers.first {
-                        Button(action: {
-                            selectedNumber = latestNumber
-                        }) {
-                            HStack(spacing: 10) {
-                                Image(systemName: "viewfinder")
-                                    .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
-                                Text(latestNumber.rawText)
-                                    .font(.system(size: 17, weight: .bold, design: .monospaced))
-                                    .foregroundColor(.white)
-                                Spacer()
-                                Text("Actions")
-                                    .font(.caption.bold())
-                                    .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
+                    // Multi-Number Cards: Display ALL detected numbers simultaneously
+                    if !detectedNumbers.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("DETECTED NUMBERS (\(detectedNumbers.count)) — TAP TO OPEN")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.white.opacity(0.8))
+                                .padding(.horizontal, 20)
+
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 10) {
+                                    ForEach(detectedNumbers) { num in
+                                        Button(action: {
+                                            let generator = UIImpactFeedbackGenerator(style: .medium)
+                                            generator.impactOccurred()
+                                            selectedNumber = num
+                                        }) {
+                                            HStack(spacing: 8) {
+                                                Image(systemName: "phone.fill")
+                                                    .font(.system(size: 13, weight: .bold))
+                                                    .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                                                Text(num.cleanNumber)
+                                                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                                                    .foregroundColor(.white)
+                                                Image(systemName: "arrow.up.right.circle.fill")
+                                                    .font(.system(size: 14))
+                                                    .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                                            }
+                                            .padding(.horizontal, 14)
+                                            .padding(.vertical, 10)
+                                            .background(Color.black.opacity(0.85))
+                                            .cornerRadius(12)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .stroke(Color(red: 0.15, green: 0.78, blue: 0.35).opacity(0.8), lineWidth: 1.5)
+                                            )
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, 16)
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .background(Color.black.opacity(0.80))
-                            .cornerRadius(14)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .stroke(Color(red: 0.15, green: 0.78, blue: 0.35).opacity(0.6), lineWidth: 1)
-                            )
                         }
-                        .padding(.horizontal, 24)
                     }
                 }
-                .padding(.bottom, 40)
+                .padding(.bottom, 36)
             }
 
             // Action Bottom Sheet
             if let number = selectedNumber {
-                Color.black.opacity(0.4)
+                Color.black.opacity(0.45)
                     .ignoresSafeArea()
                     .onTapGesture {
                         selectedNumber = nil
