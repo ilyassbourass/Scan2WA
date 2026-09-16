@@ -1,0 +1,68 @@
+name: Build IPA for LiveContainer
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode Project
+        run: xcodegen generate
+
+      - name: Build Archive
+        run: |
+          xcodebuild archive \
+            -project Scan2WA.xcodeproj \
+            -scheme Scan2WA \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath build/Scan2WA.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES
+
+      - name: Package Unsigned IPA
+        run: |
+          mkdir -p build/Payload
+          cp -r build/Scan2WA.xcarchive/Products/Applications/Scan2WA.app build/Payload/
+          cd build
+          zip -r Scan2WA.ipa Payload
+          cd ..
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Scan2WA-ipa
+          path: build/Scan2WA.ipa
+          retention-days: 30
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create v1.0.0 build/Scan2WA.ipa \
+            --title "Scan2WA v1.0.0 (LiveContainer IPA)" \
+            --notes "### Scan2WA v1.0.0
+          
+          Ready-to-sideload unsigned IPA for **LiveContainer** / AltStore / SideStore on iPhone 15 Pro Max.
+          
+          **Features:**
+          - Real-time camera OCR phone number scanning
+          - Triple Camera & Macro auto-switching (iPhone 15 Pro Max)
+          - Zoom presets (0.5x Macro, 1x, 2x, 5x)
+          - Quick action popup: 'WA Business' (direct WhatsApp chat), 'Copy', 'Call'
+          - Frame freeze mode and torch toggle" \
+            --clobber || true
