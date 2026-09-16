@@ -26,8 +26,11 @@
 	<string>Camera access is required to scan phone numbers in real-time.</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
-		<string>whatsapp</string>
+		<string>whatsapp-smb</string>
+		<string>whatsappsmb</string>
 		<string>whatsapp-business</string>
+		<string>whatsapp</string>
+		<string>whatsapp-consumer</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>

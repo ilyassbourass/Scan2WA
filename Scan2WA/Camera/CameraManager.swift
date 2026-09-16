@@ -12,6 +12,11 @@ public final class CameraManager: NSObject, ObservableObject {
     @Published public var hasCameraPermission: Bool = true
     @Published public var isMacroActive: Bool = false
 
+    public weak var previewLayer: AVCaptureVideoPreviewLayer?
+
+    private var trackedNumbersMap: [String: RecognizedNumber] = [:]
+    private var trackedRects: [String: CGRect] = [:]
+
     public enum ZoomPreset: String, CaseIterable, Identifiable {
         case macro = "0.5x"
         case oneX = "1x"
@@ -115,13 +120,12 @@ public final class CameraManager: NSObject, ObservableObject {
                 // Calculate zoom points for triple camera
                 let switchOvers = device.virtualDeviceSwitchOverVideoZoomFactors.map { CGFloat($0.floatValue) }
                 if let firstSwitch = switchOvers.first {
-                    self.baseWideZoomFactor = firstSwitch // 1x Main camera equivalent (usually 2.0 on triple camera)
+                    self.baseWideZoomFactor = firstSwitch
                 }
                 if let lastSwitch = switchOvers.last {
-                    self.teleZoomFactor = lastSwitch // 5x Telephoto on 15 Pro Max
+                    self.teleZoomFactor = lastSwitch
                 }
 
-                // Start on 1x
                 device.videoZoomFactor = self.baseWideZoomFactor
                 device.unlockForConfiguration()
 
@@ -142,16 +146,12 @@ public final class CameraManager: NSObject, ObservableObject {
                 let targetFactor: CGFloat
                 switch preset {
                 case .macro:
-                    // 0.5x Ultra Wide lens (macro capable)
                     targetFactor = device.minAvailableVideoZoomFactor
                 case .oneX:
-                    // 1x Main Camera
                     targetFactor = self.baseWideZoomFactor
                 case .twoX:
-                    // 2x Sensor Crop
                     targetFactor = min(self.baseWideZoomFactor * 2.0, device.maxAvailableVideoZoomFactor)
                 case .fiveX:
-                    // 5x Telephoto Camera (iPhone 15 Pro Max)
                     targetFactor = min(self.teleZoomFactor, device.maxAvailableVideoZoomFactor)
                 }
 
@@ -191,20 +191,57 @@ public final class CameraManager: NSObject, ObservableObject {
         isPaused.toggle()
     }
 
-    public func stopSession() {
-        sessionQueue.async { [weak self] in
-            if self?.captureSession.isRunning == true {
-                self?.captureSession.stopRunning()
-            }
-        }
-    }
+    public func updateDetectionsWithTracking(_ rawDetections: [RecognizedNumber]) {
+        guard let layer = previewLayer, layer.bounds.width > 0, layer.bounds.height > 0 else { return }
 
-    public func resumeSession() {
-        sessionQueue.async { [weak self] in
-            if self?.captureSession.isRunning == false {
-                self?.captureSession.startRunning()
+        let transform = CGAffineTransform(scaleX: 1, y: -1).translatedBy(x: 0, y: -1)
+        let now = Date()
+
+        for detection in rawDetections {
+            let metadataRect = detection.boundingBox.applying(transform)
+            let rawScreenRect = layer.layerRectConverted(fromMetadataOutputRect: metadataRect)
+
+            guard !rawScreenRect.isNull, !rawScreenRect.isInfinite, rawScreenRect.width > 10 else { continue }
+
+            let key = detection.cleanNumber
+
+            if let oldRect = trackedRects[key] {
+                // Smooth tracking with Exponential Moving Average (EMA) to eliminate jitter
+                let smoothedRect = CGRect(
+                    x: oldRect.origin.x * 0.65 + rawScreenRect.origin.x * 0.35,
+                    y: oldRect.origin.y * 0.65 + rawScreenRect.origin.y * 0.35,
+                    width: oldRect.size.width * 0.75 + rawScreenRect.size.width * 0.25,
+                    height: oldRect.size.height * 0.75 + rawScreenRect.size.height * 0.25
+                )
+                trackedRects[key] = smoothedRect
+
+                var updated = detection
+                updated.screenRect = smoothedRect
+                updated.lastSeen = now
+                trackedNumbersMap[key] = updated
+            } else {
+                trackedRects[key] = rawScreenRect
+
+                var updated = detection
+                updated.screenRect = rawScreenRect
+                updated.lastSeen = now
+                trackedNumbersMap[key] = updated
+            }
+
+            // Save to recent list
+            if !recentNumbers.contains(detection) {
+                recentNumbers.insert(detection, at: 0)
+                if recentNumbers.count > 20 {
+                    recentNumbers.removeLast()
+                }
             }
         }
+
+        // Prune numbers not seen for more than 0.7s to prevent sudden flickering
+        trackedNumbersMap = trackedNumbersMap.filter { now.timeIntervalSince($0.value.lastSeen) < 0.7 }
+        trackedRects = trackedRects.filter { trackedNumbersMap.keys.contains($0.key) }
+
+        self.detectedNumbers = Array(trackedNumbersMap.values)
     }
 }
 
@@ -218,17 +255,7 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
 
         VisionTextRecognizer.shared.processFrame(sampleBuffer) { [weak self] numbers in
             guard let self = self else { return }
-            self.detectedNumbers = numbers
-
-            // Add newly detected numbers to recent history
-            for number in numbers {
-                if !self.recentNumbers.contains(number) {
-                    self.recentNumbers.insert(number, at: 0)
-                    if self.recentNumbers.count > 20 {
-                        self.recentNumbers.removeLast()
-                    }
-                }
-            }
+            self.updateDetectionsWithTracking(numbers)
         }
     }
 }

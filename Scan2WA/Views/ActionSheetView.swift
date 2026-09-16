@@ -21,15 +21,15 @@ public struct ActionSheetView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 18) {
             // Drag handle
             Capsule()
                 .fill(Color.gray.opacity(0.4))
                 .frame(width: 40, height: 5)
                 .padding(.top, 10)
 
-            // Number header
-            VStack(spacing: 6) {
+            // Header
+            VStack(spacing: 4) {
                 Text("Detected Phone Number")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -40,52 +40,66 @@ public struct ActionSheetView: View {
                     .keyboardType(.phonePad)
                     .padding(.horizontal)
             }
-            .padding(.top, 4)
 
             // Action Buttons
-            VStack(spacing: 12) {
-                // 1. WhatsApp Business Button
+            VStack(spacing: 10) {
+                // 1. WhatsApp Business (Direct Deep Link)
                 Button(action: openWhatsAppBusiness) {
                     HStack(spacing: 12) {
-                        Image(systemName: "message.fill")
+                        Image(systemName: "briefcase.fill")
                             .font(.system(size: 18, weight: .bold))
                         Text("WA Business")
                             .font(.system(size: 17, weight: .bold))
                     }
                     .frame(maxWidth: .infinity)
-                    .frame(height: 54)
+                    .frame(height: 52)
                     .background(Color(red: 0.15, green: 0.78, blue: 0.35))
                     .foregroundColor(.white)
                     .cornerRadius(14)
-                    .shadow(color: Color(red: 0.15, green: 0.78, blue: 0.35).opacity(0.4), radius: 8, x: 0, y: 4)
+                    .shadow(color: Color(red: 0.15, green: 0.78, blue: 0.35).opacity(0.4), radius: 6, x: 0, y: 3)
                 }
 
-                HStack(spacing: 12) {
-                    // 2. Copy Button
+                // 2. Personal WhatsApp Button (Optional alternative)
+                Button(action: openPersonalWhatsApp) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "message.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("WhatsApp (Personal)")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                    .background(Color(.secondarySystemBackground))
+                    .foregroundColor(.primary)
+                    .cornerRadius(12)
+                }
+
+                HStack(spacing: 10) {
+                    // 3. Copy Button
                     Button(action: copyToClipboard) {
                         HStack(spacing: 8) {
                             Image(systemName: showCopiedAlert ? "checkmark" : "doc.on.doc")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(.system(size: 15, weight: .semibold))
                             Text(showCopiedAlert ? "Copied!" : "Copy")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(.system(size: 15, weight: .semibold))
                         }
                         .frame(maxWidth: .infinity)
-                        .frame(height: 50)
+                        .frame(height: 46)
                         .background(Color(.secondarySystemBackground))
                         .foregroundColor(.primary)
                         .cornerRadius(12)
                     }
 
-                    // 3. Call Button
+                    // 4. Call Button
                     Button(action: makePhoneCall) {
                         HStack(spacing: 8) {
                             Image(systemName: "phone.fill")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(.system(size: 15, weight: .semibold))
                             Text("Call")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(.system(size: 15, weight: .semibold))
                         }
                         .frame(maxWidth: .infinity)
-                        .frame(height: 50)
+                        .frame(height: 46)
                         .background(Color(.secondarySystemBackground))
                         .foregroundColor(.blue)
                         .cornerRadius(12)
@@ -94,22 +108,24 @@ public struct ActionSheetView: View {
             }
             .padding(.horizontal, 20)
 
-            // Country prefix notice
+            // Country prefix indication
             HStack(spacing: 6) {
                 Image(systemName: "globe")
-                    .font(.system(size: 12))
+                    .font(.system(size: 11))
                     .foregroundColor(.secondary)
-                Text("Default prefix: \(defaultCountryPrefix.isEmpty ? "None" : defaultCountryPrefix)")
-                    .font(.caption)
+                let resolved = PhoneNumberParser.shared.prepareForWhatsApp(cleanNumber: editableNumber, defaultCountryPrefix: defaultCountryPrefix)
+                Text("Chat ID: +\(resolved)")
+                    .font(.caption2)
                     .foregroundColor(.secondary)
             }
-            .padding(.bottom, 16)
+            .padding(.bottom, 14)
         }
         .padding(.bottom, 20)
         .background(Color(.systemBackground))
         .cornerRadius(24, corners: [.topLeft, .topRight])
     }
 
+    /// Opens WhatsApp Business directly without going through regular WhatsApp
     private func openWhatsAppBusiness() {
         let parser = PhoneNumberParser.shared
         let waNumber = parser.prepareForWhatsApp(
@@ -117,14 +133,44 @@ public struct ActionSheetView: View {
             defaultCountryPrefix: defaultCountryPrefix
         )
 
-        // Try standard WhatsApp scheme or universal link (opens WA Business automatically)
-        let deepLinkString = "whatsapp://send?phone=\(waNumber)"
-        let webLinkString = "https://wa.me/\(waNumber)"
+        let smbUrlString = "whatsapp-smb://send?phone=\(waNumber)"
+        let businessUrlString = "whatsapp-business://send?phone=\(waNumber)"
+        let webUrlString = "https://wa.me/\(waNumber)"
 
-        if let deepURL = URL(string: deepLinkString), UIApplication.shared.canOpenURL(deepURL) {
-            UIApplication.shared.open(deepURL, options: [:], completionHandler: nil)
-        } else if let webURL = URL(string: webLinkString) {
-            UIApplication.shared.open(webURL, options: [:], completionHandler: nil)
+        // Priority 1: Direct WhatsApp Business custom URL scheme
+        if let smbUrl = URL(string: smbUrlString), UIApplication.shared.canOpenURL(smbUrl) {
+            UIApplication.shared.open(smbUrl, options: [:], completionHandler: nil)
+        } else if let bizUrl = URL(string: businessUrlString), UIApplication.shared.canOpenURL(bizUrl) {
+            UIApplication.shared.open(bizUrl, options: [:], completionHandler: nil)
+        } else if let smbUrl = URL(string: smbUrlString) {
+            // Attempt to open even if canOpenURL was not pre-queried
+            UIApplication.shared.open(smbUrl, options: [:]) { success in
+                if !success, let webUrl = URL(string: webUrlString) {
+                    UIApplication.shared.open(webUrl, options: [:], completionHandler: nil)
+                }
+            }
+        }
+
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+        onDismiss()
+    }
+
+    /// Opens personal WhatsApp
+    private func openPersonalWhatsApp() {
+        let parser = PhoneNumberParser.shared
+        let waNumber = parser.prepareForWhatsApp(
+            cleanNumber: editableNumber,
+            defaultCountryPrefix: defaultCountryPrefix
+        )
+
+        let consumerUrlString = "whatsapp-consumer://send?phone=\(waNumber)"
+        let standardUrlString = "whatsapp://send?phone=\(waNumber)"
+
+        if let consumerUrl = URL(string: consumerUrlString), UIApplication.shared.canOpenURL(consumerUrl) {
+            UIApplication.shared.open(consumerUrl, options: [:], completionHandler: nil)
+        } else if let stdUrl = URL(string: standardUrlString) {
+            UIApplication.shared.open(stdUrl, options: [:], completionHandler: nil)
         }
 
         let generator = UINotificationFeedbackGenerator()
@@ -133,9 +179,16 @@ public struct ActionSheetView: View {
     }
 
     private func copyToClipboard() {
-        UIPasteboard.general.string = editableNumber
+        let parser = PhoneNumberParser.shared
+        let waNumber = parser.prepareForWhatsApp(
+            cleanNumber: editableNumber,
+            defaultCountryPrefix: defaultCountryPrefix
+        )
+        UIPasteboard.general.string = "+\(waNumber)"
+
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.success)
+
         withAnimation {
             showCopiedAlert = true
         }
@@ -156,26 +209,5 @@ public struct ActionSheetView: View {
             UIApplication.shared.open(callURL, options: [:], completionHandler: nil)
         }
         onDismiss()
-    }
-}
-
-// Extension to support specific corner rounding in SwiftUI
-extension View {
-    public func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
-        clipShape(RoundedCorner(radius: radius, corners: corners))
-    }
-}
-
-public struct RoundedCorner: Shape {
-    var radius: CGFloat = .infinity
-    var corners: UIRectCorner = .allCorners
-
-    public func path(in rect: CGRect) -> Path {
-        let path = UIBezierPath(
-            roundedRect: rect,
-            byRoundingCorners: corners,
-            cornerRadii: CGSize(width: radius, height: radius)
-        )
-        return Path(path.cgPath)
     }
 }

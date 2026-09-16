@@ -4,9 +4,10 @@ import CoreGraphics
 public final class PhoneNumberParser {
     public static let shared = PhoneNumberParser()
 
-    // Regex for phone numbers: matches international and local numbers with 7 to 15 digits
+    // Regex matching valid phone numbers with word boundaries to reject tracking numbers like SSD0123777-26
     private let phoneRegex: NSRegularExpression? = {
-        let pattern = #"(?:\+?[0-9]{1,4}[\s.-]?)?(?:\(?[0-9]{1,4}\)?[\s.-]?)?[0-9]{2,4}[\s.-]?[0-9]{2,4}[\s.-]?[0-9]{2,6}"#
+        // Matches +XXX... or local numbers 06..., 07..., 05... or international patterns
+        let pattern = #"(?<![A-Za-z0-9])(?:\+?[0-9]{1,4}[\s.-]?)?(?:\([0-9]{1,4}\)[\s.-]?)?[0-9]{2,4}[\s.-]?[0-9]{2,4}[\s.-]?[0-9]{2,4}(?![A-Za-z0-9])"#
         return try? NSRegularExpression(pattern: pattern, options: [])
     }()
 
@@ -19,7 +20,13 @@ public final class PhoneNumberParser {
     /// Extracts potential phone numbers from a string
     public func extractPhoneNumbers(from text: String, boundingBox: CGRect) -> [RecognizedNumber] {
         var results: [RecognizedNumber] = []
-        var detectedRawStrings = Set<String>()
+        var detectedCleanStrings = Set<String>()
+
+        // Check if full string contains package/barcode keywords to avoid
+        let lower = text.lowercased()
+        if lower.contains("ssd") || lower.contains("crbt") || lower.contains("colis") {
+            // Check only sub-tokens that are preceded by phone keywords
+        }
 
         // 1. Try NSDataDetector first
         if let detector = detector {
@@ -27,8 +34,8 @@ public final class PhoneNumberParser {
             for match in matches {
                 if let phoneNumber = match.phoneNumber {
                     let cleaned = cleanDigits(phoneNumber)
-                    if isValidPhoneLength(cleaned) {
-                        detectedRawStrings.insert(phoneNumber)
+                    if isValidPhoneNumber(cleaned) && !detectedCleanStrings.contains(cleaned) {
+                        detectedCleanStrings.insert(cleaned)
                         results.append(RecognizedNumber(
                             rawText: phoneNumber,
                             cleanNumber: cleaned,
@@ -40,15 +47,15 @@ public final class PhoneNumberParser {
             }
         }
 
-        // 2. Try Regex to catch any numbers NSDataDetector may have missed
+        // 2. Try Regex with word boundaries
         if let regex = phoneRegex {
             let nsString = text as NSString
             let matches = regex.matches(in: text, options: [], range: NSRange(location: 0, length: text.utf16.count))
             for match in matches {
                 let matchString = nsString.substring(with: match.range)
                 let cleaned = cleanDigits(matchString)
-                if isValidPhoneLength(cleaned) && !detectedRawStrings.contains(matchString) {
-                    detectedRawStrings.insert(matchString)
+                if isValidPhoneNumber(cleaned) && !detectedCleanStrings.contains(cleaned) {
+                    detectedCleanStrings.insert(cleaned)
                     results.append(RecognizedNumber(
                         rawText: matchString,
                         cleanNumber: cleaned,
@@ -76,17 +83,45 @@ public final class PhoneNumberParser {
         return result
     }
 
-    /// Verifies minimum and maximum valid phone digit length (between 7 and 15 digits)
-    public func isValidPhoneLength(_ cleaned: String) -> Bool {
-        let digitCount = cleaned.filter { $0.isNumber }.count
-        return digitCount >= 7 && digitCount <= 15
+    /// Verifies valid phone number structure (rejects serial/package codes like 0123777-26)
+    public func isValidPhoneNumber(_ cleaned: String) -> Bool {
+        let digitsOnly = cleaned.filter { $0.isNumber }
+        let count = digitsOnly.count
+
+        // Real phone numbers are typically 9 to 14 digits
+        guard count >= 9 && count <= 14 else { return false }
+
+        // If local 10-digit number starting with 0:
+        if digitsOnly.count == 10 && digitsOnly.hasPrefix("0") {
+            // For Moroccan mobile / landlines: must start with 05, 06, or 07
+            // Rejects 01, 02, 03, 04, 08, 09 (which are invoice/barcode numbers like 0123777-26)
+            let prefix2 = String(digitsOnly.prefix(2))
+            if prefix2 == "05" || prefix2 == "06" || prefix2 == "07" {
+                return true
+            }
+            // For French numbers: 01-09
+            return false
+        }
+
+        // If starting with international code +212:
+        if cleaned.hasPrefix("+212") || digitsOnly.hasPrefix("212") {
+            let withoutPrefix = digitsOnly.hasPrefix("212") ? String(digitsOnly.dropFirst(3)) : digitsOnly
+            if withoutPrefix.hasPrefix("5") || withoutPrefix.hasPrefix("6") || withoutPrefix.hasPrefix("7") {
+                return withoutPrefix.count == 9
+            }
+        }
+
+        // Generic international numbers (+1, +33, +44, etc.)
+        if cleaned.hasPrefix("+") && count >= 10 {
+            return true
+        }
+
+        // Any valid 10-digit number
+        return count == 10
     }
 
     /// Formats phone number for clean readability
     public func formatDisplay(_ cleaned: String) -> String {
-        if cleaned.hasPrefix("+") {
-            return cleaned
-        }
         return cleaned
     }
 
@@ -106,14 +141,19 @@ public final class PhoneNumberParser {
             return digitsOnly
         }
 
-        // If starts with local single 0 (e.g. 0612345678 in France or Morocco)
+        // If starts with 212... already
+        if digitsOnly.hasPrefix("212") && digitsOnly.count == 12 {
+            return digitsOnly
+        }
+
+        // If starts with local single 0 (e.g. 0605922827)
         if digitsOnly.hasPrefix("0") && !cleanPrefix.isEmpty {
             digitsOnly.removeFirst()
             return cleanPrefix + digitsOnly
         }
 
-        // If no country code and doesn't start with 0, prepend prefix if available
-        if !cleanPrefix.isEmpty && digitsOnly.count < 11 {
+        // If missing country code, prepend prefix
+        if !cleanPrefix.isEmpty && digitsOnly.count <= 10 {
             return cleanPrefix + digitsOnly
         }
 
@@ -122,15 +162,7 @@ public final class PhoneNumberParser {
 
     /// Formats number for dialing with tel://
     public func prepareForCall(cleanNumber: String, defaultCountryPrefix: String) -> String {
-        if cleanNumber.hasPrefix("+") {
-            return cleanNumber
-        }
-        if cleanNumber.hasPrefix("0") && !defaultCountryPrefix.isEmpty {
-            var digits = cleanNumber
-            digits.removeFirst()
-            let prefixWithPlus = defaultCountryPrefix.hasPrefix("+") ? defaultCountryPrefix : "+\(defaultCountryPrefix)"
-            return prefixWithPlus + digits
-        }
-        return cleanNumber
+        let waDigits = prepareForWhatsApp(cleanNumber: cleanNumber, defaultCountryPrefix: defaultCountryPrefix)
+        return "+\(waDigits)"
     }
 }

@@ -21,8 +21,11 @@ targets:
           - UIInterfaceOrientationPortrait
         NSCameraUsageDescription: "Camera access is needed to scan and recognize phone numbers in real-time."
         LSApplicationQueriesSchemes:
-          - whatsapp
+          - whatsapp-smb
+          - whatsappsmb
           - whatsapp-business
+          - whatsapp
+          - whatsapp-consumer
     settings:
       CODE_SIGNING_ALLOWED: NO
       CODE_SIGNING_REQUIRED: NO

@@ -18,9 +18,11 @@ public struct CameraPreviewView: UIViewRepresentable {
     }
 
     public let session: AVCaptureSession
+    public let onLayerAvailable: (AVCaptureVideoPreviewLayer) -> Void
 
-    public init(session: AVCaptureSession) {
+    public init(session: AVCaptureSession, onLayerAvailable: @escaping (AVCaptureVideoPreviewLayer) -> Void) {
         self.session = session
+        self.onLayerAvailable = onLayerAvailable
     }
 
     public func makeUIView(context: Context) -> VideoPreviewUIView {
@@ -29,10 +31,17 @@ public struct CameraPreviewView: UIViewRepresentable {
         view.previewLayer.session = session
         view.previewLayer.videoGravity = .resizeAspectFill
         view.previewLayer.connection?.videoOrientation = .portrait
+
+        DispatchQueue.main.async {
+            onLayerAvailable(view.previewLayer)
+        }
         return view
     }
 
     public func updateUIView(_ uiView: VideoPreviewUIView, context: Context) {
         uiView.previewLayer.frame = uiView.bounds
+        DispatchQueue.main.async {
+            onLayerAvailable(uiView.previewLayer)
+        }
     }
 }

@@ -2,11 +2,10 @@ import SwiftUI
 
 public struct MainScannerView: View {
     @StateObject private var cameraManager = CameraManager()
-    @AppStorage("defaultCountryPrefix") private var defaultCountryPrefix: String = "+1"
+    @AppStorage("defaultCountryPrefix") private var defaultCountryPrefix: String = "+212"
 
     @State private var selectedNumber: RecognizedNumber?
     @State private var showSettings = false
-    @State private var showHistorySheet = false
 
     public init() {}
 
@@ -16,10 +15,12 @@ public struct MainScannerView: View {
             Color.black.ignoresSafeArea()
 
             if cameraManager.hasCameraPermission {
-                CameraPreviewView(session: cameraManager.captureSession)
-                    .ignoresSafeArea()
+                CameraPreviewView(session: cameraManager.captureSession) { previewLayer in
+                    cameraManager.previewLayer = previewLayer
+                }
+                .ignoresSafeArea()
 
-                // Interactive Number Overlay on live camera
+                // Fixed Underline Overlay directly tracking the document text
                 ScannerOverlayView(numbers: cameraManager.detectedNumbers) { number in
                     selectedNumber = number
                 }
@@ -39,10 +40,10 @@ public struct MainScannerView: View {
                 }
             }
 
-            // Top Bar Overlay
+            // Top Bar Controls
             VStack {
                 HStack {
-                    // Torch Button
+                    // Flashlight / Torch Button
                     Button(action: {
                         cameraManager.toggleTorch()
                     }) {
@@ -63,7 +64,7 @@ public struct MainScannerView: View {
                         HStack(spacing: 4) {
                             Image(systemName: "globe")
                                 .font(.system(size: 12))
-                            Text(defaultCountryPrefix.isEmpty ? "Prefix" : defaultCountryPrefix)
+                            Text(defaultCountryPrefix.isEmpty ? "+212" : defaultCountryPrefix)
                                 .font(.system(size: 13, weight: .bold))
                         }
                         .padding(.horizontal, 12)
@@ -91,7 +92,7 @@ public struct MainScannerView: View {
                 .padding(.top, 50)
 
                 if cameraManager.isPaused {
-                    Text("FRAME FROZEN — TAP NUMBER TO ACT")
+                    Text("FRAME FROZEN — TAP ANY NUMBER")
                         .font(.caption2.bold())
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
@@ -103,8 +104,8 @@ public struct MainScannerView: View {
 
                 Spacer()
 
-                // Bottom Controls for iPhone 15 Pro Max
-                VStack(spacing: 16) {
+                // Bottom Zoom Controls (iPhone 15 Pro Max) & Scanned Quick Action
+                VStack(spacing: 14) {
                     // Zoom Presets: 0.5x (Macro), 1x, 2x, 5x
                     HStack(spacing: 16) {
                         ForEach(CameraManager.ZoomPreset.allCases) { preset in
@@ -121,7 +122,7 @@ public struct MainScannerView: View {
                         }
                     }
 
-                    // Scanned Numbers Quick Strip
+                    // Bottom Drawer Card for Detected Number
                     if let latestNumber = cameraManager.detectedNumbers.first {
                         Button(action: {
                             selectedNumber = latestNumber
@@ -129,11 +130,11 @@ public struct MainScannerView: View {
                             HStack(spacing: 10) {
                                 Image(systemName: "viewfinder")
                                     .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
-                                Text(latestNumber.cleanNumber)
-                                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                                Text(latestNumber.rawText)
+                                    .font(.system(size: 17, weight: .bold, design: .monospaced))
                                     .foregroundColor(.white)
                                 Spacer()
-                                Text("Open Actions")
+                                Text("Actions")
                                     .font(.caption.bold())
                                     .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
                                 Image(systemName: "chevron.right")
@@ -142,7 +143,7 @@ public struct MainScannerView: View {
                             }
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
-                            .background(Color.black.opacity(0.75))
+                            .background(Color.black.opacity(0.80))
                             .cornerRadius(14)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 14)
@@ -150,7 +151,6 @@ public struct MainScannerView: View {
                             )
                         }
                         .padding(.horizontal, 24)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
                 .padding(.bottom, 40)
@@ -176,7 +176,6 @@ public struct MainScannerView: View {
                 }
                 .ignoresSafeArea(edges: .bottom)
                 .transition(.move(edge: .bottom))
-                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: selectedNumber != nil)
             }
         }
         .sheet(isPresented: $showSettings) {
