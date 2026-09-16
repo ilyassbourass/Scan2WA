@@ -122,7 +122,7 @@ public struct ActionSheetView: View {
         }
         .padding(.bottom, 20)
         .background(Color(.systemBackground))
-        .cornerRadius(24, corners: [.topLeft, .topRight])
+        .clipShape(RoundedRectangle(cornerRadius: 24))
     }
 
     /// Opens WhatsApp Business directly without going through regular WhatsApp
