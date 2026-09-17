@@ -53,16 +53,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create v1.0.0 build/Scan2WA.ipa \
-            --title "Scan2WA v1.0.0 (LiveContainer IPA)" \
-            --notes "### Scan2WA v1.0.0
+          gh release create v1.4.0 build/Scan2WA.ipa \
+            --title "Scan2WA v1.4.0 (True Photo Freeze & Multi-Number Fix)" \
+            --notes "### Scan2WA v1.4.0
           
           Ready-to-sideload unsigned IPA for **LiveContainer** / AltStore / SideStore on iPhone 15 Pro Max.
           
-          **Features:**
-          - Real-time camera OCR phone number scanning
-          - Triple Camera & Macro auto-switching (iPhone 15 Pro Max)
-          - Zoom presets (0.5x Macro, 1x, 2x, 5x)
-          - Quick action popup: 'WA Business' (direct WhatsApp chat), 'Copy', 'Call'
-          - Frame freeze mode and torch toggle" \
+          **What's New in v1.4.0:**
+          - **True Photo Freeze**: Visual freeze immediately shows the captured still photo rather than a moving camera feed.
+          - **Multi-Number Capture**: 0.65s debounce window plus high-resolution secondary OCR pass on the frozen photo to catch both Expéditeur and Destinataire numbers.
+          - **Manual Shutter Button**: Circle shutter button to capture and freeze whenever you want.
+          - **Direct WhatsApp Business routing**: Using 'whatsapp-smb://' to enter chat directly without confirmation popups.
+          - **Personal WhatsApp routing**: Direct 'whatsapp-consumer://' deep link.
+          - **Dual SIM Calling**: In-app guidance and 1-tap deep link to iOS Cellular settings for default SIM line." \
             --clobber || true

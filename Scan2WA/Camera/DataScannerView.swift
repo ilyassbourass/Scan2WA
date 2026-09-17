@@ -1,5 +1,6 @@
 import SwiftUI
 import VisionKit
+import Vision
 import AVFoundation
 
 public struct DataScannerView: UIViewControllerRepresentable {
@@ -7,7 +8,9 @@ public struct DataScannerView: UIViewControllerRepresentable {
     @Binding public var isScanning: Bool
     @Binding public var isTorchOn: Bool
     @Binding public var zoomFactor: CGFloat
+    @Binding public var capturedImage: UIImage?
     public let autoFreeze: Bool
+    @Binding public var triggerCapture: (() -> Void)?
     public let onSelectNumber: (RecognizedNumber) -> Void
 
     public init(
@@ -15,14 +18,18 @@ public struct DataScannerView: UIViewControllerRepresentable {
         isScanning: Binding<Bool>,
         isTorchOn: Binding<Bool>,
         zoomFactor: Binding<CGFloat>,
+        capturedImage: Binding<UIImage?>,
         autoFreeze: Bool,
+        triggerCapture: Binding<(() -> Void)?>,
         onSelectNumber: @escaping (RecognizedNumber) -> Void
     ) {
         self._detectedNumbers = detectedNumbers
         self._isScanning = isScanning
         self._isTorchOn = isTorchOn
         self._zoomFactor = zoomFactor
+        self._capturedImage = capturedImage
         self.autoFreeze = autoFreeze
+        self._triggerCapture = triggerCapture
         self.onSelectNumber = onSelectNumber
     }
 
@@ -39,7 +46,14 @@ public struct DataScannerView: UIViewControllerRepresentable {
         scanner.delegate = context.coordinator
         context.coordinator.scanner = scanner
 
-        if isScanning {
+        // Provide capture trigger closure to parent
+        DispatchQueue.main.async {
+            self.triggerCapture = { [weak context] in
+                context?.coordinator.performCapture()
+            }
+        }
+
+        if isScanning && capturedImage == nil {
             try? scanner.startScanning()
         }
 
@@ -47,10 +61,15 @@ public struct DataScannerView: UIViewControllerRepresentable {
     }
 
     public func updateUIViewController(_ uiViewController: DataScannerViewController, context: Context) {
-        if isScanning {
-            try? uiViewController.startScanning()
+        if isScanning && capturedImage == nil {
+            if !uiViewController.isScanning {
+                context.coordinator.reset()
+                try? uiViewController.startScanning()
+            }
         } else {
-            uiViewController.stopScanning()
+            if uiViewController.isScanning {
+                uiViewController.stopScanning()
+            }
         }
 
         // Handle torch toggle
@@ -73,12 +92,15 @@ public struct DataScannerView: UIViewControllerRepresentable {
     public class Coordinator: NSObject, DataScannerViewControllerDelegate {
         let parent: DataScannerView
         weak var scanner: DataScannerViewController?
+        private var freezeWorkItem: DispatchWorkItem?
+        private var accumulatedNumbers: [String: RecognizedNumber] = [:]
+        private var isCapturing: Bool = false
 
         init(_ parent: DataScannerView) {
             self.parent = parent
         }
 
-        // Direct tap on any highlighted number on the camera screen
+        // Direct tap on any highlighted number on the live camera screen
         public func dataScanner(_ dataScanner: DataScannerViewController, didTapOn item: RecognizedItem) {
             if case .text(let text) = item {
                 let parsed = PhoneNumberParser.shared.extractPhoneNumbers(from: text.transcript, boundingBox: .zero)
@@ -117,33 +139,67 @@ public struct DataScannerView: UIViewControllerRepresentable {
         }
 
         private func processItems(_ items: [RecognizedItem]) {
-            var extractedList: [RecognizedNumber] = []
-            var seenKeys = Set<String>()
+            guard parent.isScanning && parent.capturedImage == nil else { return }
 
             for item in items {
                 if case .text(let text) = item {
                     let numbers = PhoneNumberParser.shared.extractPhoneNumbers(from: text.transcript, boundingBox: .zero)
                     for num in numbers {
-                        if !seenKeys.contains(num.cleanNumber) {
-                            seenKeys.insert(num.cleanNumber)
-                            extractedList.append(num)
-                        }
+                        accumulatedNumbers[num.cleanNumber] = num
                     }
                 }
             }
 
-            guard !extractedList.isEmpty else { return }
+            guard !accumulatedNumbers.isEmpty else { return }
 
+            let list = Array(accumulatedNumbers.values)
             DispatchQueue.main.async {
-                self.parent.detectedNumbers = extractedList
+                self.parent.detectedNumbers = list
+            }
 
-                // Automatically freeze the photo when numbers are detected
-                if self.parent.autoFreeze && self.parent.isScanning {
+            // If autoFreeze is enabled: wait 0.65 seconds of stabilization to gather ALL numbers on document
+            if parent.autoFreeze {
+                freezeWorkItem?.cancel()
+                let workItem = DispatchWorkItem { [weak self] in
+                    self?.performCapture()
+                }
+                freezeWorkItem = workItem
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.65, execute: workItem)
+            }
+        }
+
+        public func performCapture() {
+            guard let scanner = scanner, !isCapturing, parent.capturedImage == nil else { return }
+            isCapturing = true
+            Task { @MainActor in
+                defer { self.isCapturing = false }
+                do {
+                    let photo = try await scanner.capturePhoto()
                     let haptic = UINotificationFeedbackGenerator()
                     haptic.notificationOccurred(.success)
+
+                    self.parent.capturedImage = photo
                     self.parent.isScanning = false
+
+                    // Perform a high-res OCR pass on the still image to catch any additional numbers
+                    VisionTextRecognizer.shared.processImage(photo) { [weak self] additionalNumbers in
+                        guard let self = self else { return }
+                        for n in additionalNumbers {
+                            self.accumulatedNumbers[n.cleanNumber] = n
+                        }
+                        self.parent.detectedNumbers = Array(self.accumulatedNumbers.values)
+                    }
+                } catch {
+                    print("Failed to capture still photo: \(error)")
                 }
             }
+        }
+
+        public func reset() {
+            freezeWorkItem?.cancel()
+            freezeWorkItem = nil
+            isCapturing = false
+            accumulatedNumbers.removeAll()
         }
     }
 }
