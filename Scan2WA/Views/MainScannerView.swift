@@ -3,6 +3,7 @@ import VisionKit
 
 public struct MainScannerView: View {
     @AppStorage("defaultCountryPrefix") private var defaultCountryPrefix: String = "+212"
+    @AppStorage("autoFreezeOnDetection") private var autoFreeze: Bool = true
 
     @State private var detectedNumbers: [RecognizedNumber] = []
     @State private var selectedNumber: RecognizedNumber?
@@ -28,6 +29,7 @@ public struct MainScannerView: View {
                     isScanning: $isScanning,
                     isTorchOn: $isTorchOn,
                     zoomFactor: $zoomFactor,
+                    autoFreeze: autoFreeze,
                     onSelectNumber: { number in
                         selectedNumber = number
                     }
@@ -85,13 +87,20 @@ public struct MainScannerView: View {
 
                     Spacer()
 
-                    // Freeze / Resume Scanning Button
+                    // Freeze / Scan Again Button
                     Button(action: {
-                        isScanning.toggle()
+                        if !isScanning {
+                            // Resume / Scan Again
+                            detectedNumbers = []
+                            isScanning = true
+                        } else {
+                            // Pause
+                            isScanning = false
+                        }
                     }) {
-                        Image(systemName: isScanning ? "pause.fill" : "play.fill")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(isScanning ? .white : .orange)
+                        Image(systemName: isScanning ? "pause.fill" : "arrow.clockwise")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(isScanning ? .white : .green)
                             .frame(width: 44, height: 44)
                             .background(Color.black.opacity(0.6))
                             .clipShape(Circle())
@@ -101,17 +110,48 @@ public struct MainScannerView: View {
                 .padding(.top, 50)
 
                 if !isScanning {
-                    Text("SCANNER PAUSED — TAP ANY NUMBER")
-                        .font(.caption.bold())
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
-                        .background(Color.orange.opacity(0.95))
-                        .foregroundColor(.black)
-                        .cornerRadius(8)
-                        .padding(.top, 6)
+                    HStack(spacing: 8) {
+                        Image(systemName: "snowflake")
+                            .font(.caption.bold())
+                        Text("PHOTO FROZEN — TAP A NUMBER OR SCAN AGAIN")
+                            .font(.caption.bold())
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(Color.orange.opacity(0.95))
+                    .foregroundColor(.black)
+                    .cornerRadius(10)
+                    .padding(.top, 6)
                 }
 
                 Spacer()
+
+                // Center "Scan Again" button when frozen
+                if !isScanning {
+                    Button(action: {
+                        let generator = UIImpactFeedbackGenerator(style: .medium)
+                        generator.impactOccurred()
+                        detectedNumbers = []
+                        isScanning = true
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 16, weight: .bold))
+                            Text("Scan Again")
+                                .font(.system(size: 16, weight: .bold))
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(Color.black.opacity(0.75))
+                        .foregroundColor(.white)
+                        .cornerRadius(24)
+                        .overlay(
+                            Capsule().stroke(Color.white.opacity(0.5), lineWidth: 1.5)
+                        )
+                        .shadow(radius: 6)
+                    }
+                    .padding(.bottom, 8)
+                }
 
                 // Bottom Multi-Number Selection Carousel & Zoom Presets
                 VStack(spacing: 14) {
@@ -134,9 +174,9 @@ public struct MainScannerView: View {
                     // Multi-Number Cards: Display ALL detected numbers simultaneously
                     if !detectedNumbers.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("DETECTED NUMBERS (\(detectedNumbers.count)) — TAP TO OPEN")
+                            Text("DETECTED NUMBERS (\(detectedNumbers.count)) — TAP TO SELECT")
                                 .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(.white.opacity(0.8))
+                                .foregroundColor(.white.opacity(0.85))
                                 .padding(.horizontal, 20)
 
                             ScrollView(.horizontal, showsIndicators: false) {
@@ -164,7 +204,7 @@ public struct MainScannerView: View {
                                             .cornerRadius(12)
                                             .overlay(
                                                 RoundedRectangle(cornerRadius: 12)
-                                                    .stroke(Color(red: 0.15, green: 0.78, blue: 0.35).opacity(0.8), lineWidth: 1.5)
+                                                    .stroke(Color(red: 0.15, green: 0.78, blue: 0.35).opacity(0.85), lineWidth: 1.5)
                                             )
                                         }
                                     }

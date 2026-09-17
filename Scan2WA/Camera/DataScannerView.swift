@@ -7,6 +7,7 @@ public struct DataScannerView: UIViewControllerRepresentable {
     @Binding public var isScanning: Bool
     @Binding public var isTorchOn: Bool
     @Binding public var zoomFactor: CGFloat
+    public let autoFreeze: Bool
     public let onSelectNumber: (RecognizedNumber) -> Void
 
     public init(
@@ -14,12 +15,14 @@ public struct DataScannerView: UIViewControllerRepresentable {
         isScanning: Binding<Bool>,
         isTorchOn: Binding<Bool>,
         zoomFactor: Binding<CGFloat>,
+        autoFreeze: Bool,
         onSelectNumber: @escaping (RecognizedNumber) -> Void
     ) {
         self._detectedNumbers = detectedNumbers
         self._isScanning = isScanning
         self._isTorchOn = isTorchOn
         self._zoomFactor = zoomFactor
+        self.autoFreeze = autoFreeze
         self.onSelectNumber = onSelectNumber
     }
 
@@ -129,8 +132,17 @@ public struct DataScannerView: UIViewControllerRepresentable {
                 }
             }
 
+            guard !extractedList.isEmpty else { return }
+
             DispatchQueue.main.async {
                 self.parent.detectedNumbers = extractedList
+
+                // Automatically freeze the photo when numbers are detected
+                if self.parent.autoFreeze && self.parent.isScanning {
+                    let haptic = UINotificationFeedbackGenerator()
+                    haptic.notificationOccurred(.success)
+                    self.parent.isScanning = false
+                }
             }
         }
     }

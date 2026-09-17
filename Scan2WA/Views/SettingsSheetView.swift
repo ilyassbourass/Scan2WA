@@ -1,7 +1,9 @@
 import SwiftUI
+import UIKit
 
 public struct SettingsSheetView: View {
     @Binding public var defaultCountryPrefix: String
+    @AppStorage("autoFreezeOnDetection") private var autoFreezeOnDetection: Bool = true
     @Environment(\.dismiss) private var dismiss
 
     private let commonCountries = [
@@ -27,7 +29,56 @@ public struct SettingsSheetView: View {
     public var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("Current Prefix")) {
+                Section(header: Text("Scanner Behavior")) {
+                    Toggle(isOn: $autoFreezeOnDetection) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Auto-Freeze on Numbers Detected")
+                                .font(.body)
+                            Text("Freezes the photo as soon as phone numbers are found so you can comfortably select them.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+
+                Section(header: Text("Dual SIM Calling Setup")) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Default SIM for Calls")
+                            .font(.headline)
+                        Text("On iOS, the default calling line (Primary vs Secondary) is controlled by Apple in system settings. To make calls directly without being prompted each time:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("1. Tap the button below to open Settings")
+                            Text("2. Go to **Cellular** > **Default Voice Line**")
+                            Text("3. Choose your preferred SIM line (Primary or Secondary)")
+                        }
+                        .font(.caption)
+                        .foregroundColor(.primary)
+                        .padding(.vertical, 4)
+
+                        Button(action: {
+                            if let url = URL(string: UIApplication.openSettingsURLString) {
+                                UIApplication.shared.open(url)
+                            }
+                        }) {
+                            HStack {
+                                Image(systemName: "antenna.radiowaves.left.and.right")
+                                Text("Open iPhone Settings")
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                            }
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.blue)
+                        }
+                        .padding(.top, 4)
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                Section(header: Text("Current Country Prefix")) {
                     HStack {
                         Text("Default Country Code")
                         Spacer()

@@ -108,17 +108,22 @@ public struct ActionSheetView: View {
             }
             .padding(.horizontal, 20)
 
-            // Country prefix indication
-            HStack(spacing: 6) {
-                Image(systemName: "globe")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-                let resolved = PhoneNumberParser.shared.prepareForWhatsApp(cleanNumber: editableNumber, defaultCountryPrefix: defaultCountryPrefix)
-                Text("Chat ID: +\(resolved)")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
+            // Country prefix & Dual SIM line notice
+            VStack(spacing: 4) {
+                HStack(spacing: 6) {
+                    Image(systemName: "globe")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                    let resolved = PhoneNumberParser.shared.prepareForWhatsApp(cleanNumber: editableNumber, defaultCountryPrefix: defaultCountryPrefix)
+                    Text("Chat ID: +\(resolved)")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                Text("Dual SIM: Set preferred line in Settings > Cellular > Default Voice Line")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary.opacity(0.8))
             }
-            .padding(.bottom, 14)
+            .padding(.bottom, 12)
         }
         .padding(.bottom, 20)
         .background(Color(.systemBackground))
@@ -137,16 +142,14 @@ public struct ActionSheetView: View {
         let businessUrlString = "whatsapp-business://send?phone=\(waNumber)"
         let webUrlString = "https://wa.me/\(waNumber)"
 
-        // Priority 1: Direct WhatsApp Business custom URL scheme
-        if let smbUrl = URL(string: smbUrlString), UIApplication.shared.canOpenURL(smbUrl) {
-            UIApplication.shared.open(smbUrl, options: [:], completionHandler: nil)
-        } else if let bizUrl = URL(string: businessUrlString), UIApplication.shared.canOpenURL(bizUrl) {
-            UIApplication.shared.open(bizUrl, options: [:], completionHandler: nil)
-        } else if let smbUrl = URL(string: smbUrlString) {
-            // Attempt to open even if canOpenURL was not pre-queried
+        if let smbUrl = URL(string: smbUrlString) {
             UIApplication.shared.open(smbUrl, options: [:]) { success in
-                if !success, let webUrl = URL(string: webUrlString) {
-                    UIApplication.shared.open(webUrl, options: [:], completionHandler: nil)
+                if !success, let bizUrl = URL(string: businessUrlString) {
+                    UIApplication.shared.open(bizUrl, options: [:]) { success2 in
+                        if !success2, let webUrl = URL(string: webUrlString) {
+                            UIApplication.shared.open(webUrl, options: [:], completionHandler: nil)
+                        }
+                    }
                 }
             }
         }
@@ -165,12 +168,14 @@ public struct ActionSheetView: View {
         )
 
         let consumerUrlString = "whatsapp-consumer://send?phone=\(waNumber)"
-        let standardUrlString = "whatsapp://send?phone=\(waNumber)"
+        let webUrlString = "https://wa.me/\(waNumber)"
 
-        if let consumerUrl = URL(string: consumerUrlString), UIApplication.shared.canOpenURL(consumerUrl) {
-            UIApplication.shared.open(consumerUrl, options: [:], completionHandler: nil)
-        } else if let stdUrl = URL(string: standardUrlString) {
-            UIApplication.shared.open(stdUrl, options: [:], completionHandler: nil)
+        if let consumerUrl = URL(string: consumerUrlString) {
+            UIApplication.shared.open(consumerUrl, options: [:]) { success in
+                if !success, let webUrl = URL(string: webUrlString) {
+                    UIApplication.shared.open(webUrl, options: [:], completionHandler: nil)
+                }
+            }
         }
 
         let generator = UINotificationFeedbackGenerator()
