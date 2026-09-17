@@ -2,6 +2,7 @@ import Foundation
 import AVFoundation
 import SwiftUI
 import Combine
+import CoreImage
 
 public final class CameraManager: NSObject, ObservableObject {
     @Published public var detectedNumbers: [RecognizedNumber] = []
@@ -11,11 +12,17 @@ public final class CameraManager: NSObject, ObservableObject {
     @Published public var isPaused: Bool = false
     @Published public var hasCameraPermission: Bool = true
     @Published public var isMacroActive: Bool = false
+    @Published public var capturedImage: UIImage? = nil
+    @Published public var autoFreeze: Bool = true
 
     public weak var previewLayer: AVCaptureVideoPreviewLayer?
 
     private var trackedNumbersMap: [String: RecognizedNumber] = [:]
     private var trackedRects: [String: CGRect] = [:]
+    private var freezeWorkItem: DispatchWorkItem?
+    private var isFreezing: Bool = false
+    private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
+    private var latestPixelBuffer: CVPixelBuffer?
 
     public enum ZoomPreset: String, CaseIterable, Identifiable {
         case macro = "0.5x"
@@ -97,7 +104,11 @@ public final class CameraManager: NSObject, ObservableObject {
                     self.captureSession.addOutput(self.videoOutput)
 
                     if let connection = self.videoOutput.connection(with: .video) {
-                        connection.videoOrientation = .portrait
+                        if #available(iOS 17.0, *) {
+                            connection.videoRotationAngle = 90
+                        } else {
+                            connection.videoOrientation = .portrait
+                        }
                         if connection.isVideoStabilizationSupported {
                             connection.preferredVideoStabilizationMode = .standard
                         }
@@ -187,8 +198,87 @@ public final class CameraManager: NSObject, ObservableObject {
         }
     }
 
-    public func togglePause() {
-        isPaused.toggle()
+    public func triggerManualFreeze() {
+        guard let buffer = latestPixelBuffer else { return }
+        performFreeze(with: buffer)
+    }
+
+    public func resetScan() {
+        let haptic = UIImpactFeedbackGenerator(style: .medium)
+        haptic.impactOccurred()
+
+        freezeWorkItem?.cancel()
+        freezeWorkItem = nil
+        isFreezing = false
+        trackedNumbersMap.removeAll()
+        trackedRects.removeAll()
+        detectedNumbers.removeAll()
+        latestPixelBuffer = nil
+        capturedImage = nil
+        isPaused = false
+    }
+
+    private func handleDetectedNumbers(_ rawDetections: [RecognizedNumber], from pixelBuffer: CVPixelBuffer) {
+        updateDetectionsWithTracking(rawDetections)
+
+        guard autoFreeze, !rawDetections.isEmpty, !isFreezing, capturedImage == nil else { return }
+
+        // If 2 or more numbers are detected (e.g. Expéditeur & Destinataire): freeze IMMEDIATELY!
+        if rawDetections.count >= 2 {
+            freezeWorkItem?.cancel()
+            freezeWorkItem = nil
+            performFreeze(with: pixelBuffer)
+            return
+        }
+
+        // If 1 number detected: start a 0.35s one-shot timer if not already running.
+        // DO NOT CANCEL on subsequent frames! This guarantees it will freeze without requiring camera motion!
+        if freezeWorkItem == nil {
+            let workItem = DispatchWorkItem { [weak self] in
+                guard let self = self, !self.isPaused, self.capturedImage == nil else { return }
+                if let buffer = self.latestPixelBuffer {
+                    self.performFreeze(with: buffer)
+                }
+            }
+            freezeWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: workItem)
+        }
+    }
+
+    public func performFreeze(with buffer: CVPixelBuffer) {
+        guard !isFreezing, capturedImage == nil else { return }
+        isFreezing = true
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            let ciImage = CIImage(cvPixelBuffer: buffer)
+            guard let cgImage = self.ciContext.createCGImage(ciImage, from: ciImage.extent) else {
+                DispatchQueue.main.async { self.isFreezing = false }
+                return
+            }
+            let image = UIImage(cgImage: cgImage, scale: 1.0, orientation: .right)
+
+            DispatchQueue.main.async {
+                let haptic = UINotificationFeedbackGenerator()
+                haptic.notificationOccurred(.success)
+
+                self.capturedImage = image
+                self.isPaused = true
+                self.isFreezing = false
+                self.freezeWorkItem = nil
+
+                // Perform secondary high-res OCR pass on the frozen photo to catch any additional numbers
+                VisionTextRecognizer.shared.processImage(image) { [weak self] allNumbers in
+                    guard let self = self else { return }
+                    for n in allNumbers {
+                        if self.trackedNumbersMap[n.cleanNumber] == nil {
+                            self.trackedNumbersMap[n.cleanNumber] = n
+                        }
+                    }
+                    self.detectedNumbers = Array(self.trackedNumbersMap.values)
+                }
+            }
+        }
     }
 
     public func updateDetectionsWithTracking(_ rawDetections: [RecognizedNumber]) {
@@ -251,11 +341,16 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
     ) {
-        guard !isPaused else { return }
+        guard !isPaused, capturedImage == nil else { return }
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+
+        // Retain latest pixel buffer for silent capture
+        self.latestPixelBuffer = pixelBuffer
 
         VisionTextRecognizer.shared.processFrame(sampleBuffer) { [weak self] numbers in
-            guard let self = self else { return }
-            self.updateDetectionsWithTracking(numbers)
+            guard let self = self, !self.isPaused, self.capturedImage == nil else { return }
+            self.handleDetectedNumbers(numbers, from: pixelBuffer)
         }
     }
 }
+

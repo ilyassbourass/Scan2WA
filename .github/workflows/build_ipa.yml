@@ -53,17 +53,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create v1.4.0 build/Scan2WA.ipa \
-            --title "Scan2WA v1.4.0 (True Photo Freeze & Multi-Number Fix)" \
-            --notes "### Scan2WA v1.4.0
+          gh release create v1.5.0 build/Scan2WA.ipa \
+            --title "Scan2WA v1.5.0 (Silent Freeze, Instant Detection & Prominent Scan Again)" \
+            --notes "### Scan2WA v1.5.0
           
           Ready-to-sideload unsigned IPA for **LiveContainer** / AltStore / SideStore on iPhone 15 Pro Max.
           
-          **What's New in v1.4.0:**
-          - **True Photo Freeze**: Visual freeze immediately shows the captured still photo rather than a moving camera feed.
-          - **Multi-Number Capture**: 0.65s debounce window plus high-resolution secondary OCR pass on the frozen photo to catch both Expéditeur and Destinataire numbers.
-          - **Manual Shutter Button**: Circle shutter button to capture and freeze whenever you want.
-          - **Direct WhatsApp Business routing**: Using 'whatsapp-smb://' to enter chat directly without confirmation popups.
-          - **Personal WhatsApp routing**: Direct 'whatsapp-consumer://' deep link.
-          - **Dual SIM Calling**: In-app guidance and 1-tap deep link to iOS Cellular settings for default SIM line." \
+          **What's New in v1.5.0:**
+          - **100% Silent Instant Freeze**: Freezes frame directly from video buffer with zero shutter sound (no audio/song).
+          - **Direct Freeze on Numbers Detected**: Immediate freeze upon detecting multiple numbers, or 0.35s one-shot timer for single numbers (no waiting to move away).
+          - **Prominent 'Scan Again' Button**: Large, glowing green button right in the center and top bar to easily scan the next label.
+          - **Multi-Number Capture**: Catches both Expéditeur and Destinataire with secondary high-res OCR pass on the frozen photo.
+          - **WhatsApp Business Direct Chat**: Using 'whatsapp-smb://' to enter chat directly without popup dialogs.
+          - **Personal WhatsApp Routing**: Using 'whatsapp-consumer://'.
+          - **Dual SIM Calling Setup**: 1-tap shortcut to iOS Cellular Settings." \
             || true

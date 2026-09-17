@@ -1,22 +1,13 @@
 import SwiftUI
-import VisionKit
+import AVFoundation
 
 public struct MainScannerView: View {
+    @StateObject private var cameraManager = CameraManager()
     @AppStorage("defaultCountryPrefix") private var defaultCountryPrefix: String = "+212"
     @AppStorage("autoFreezeOnDetection") private var autoFreeze: Bool = true
 
-    @State private var detectedNumbers: [RecognizedNumber] = []
     @State private var selectedNumber: RecognizedNumber?
-    @State private var isScanning: Bool = true
-    @State private var isTorchOn: Bool = false
-    @State private var zoomFactor: CGFloat = 1.0
     @State private var showSettings: Bool = false
-    @State private var capturedImage: UIImage? = nil
-    @State private var triggerManualCapture: (() -> Void)? = nil
-
-    private var isScannerAvailable: Bool {
-        DataScannerViewController.isSupported && DataScannerViewController.isAvailable
-    }
 
     public init() {}
 
@@ -24,34 +15,12 @@ public struct MainScannerView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            // Viewport: Frozen still photo OR Live DataScanner camera feed
-            if let image = capturedImage {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
-                    .ignoresSafeArea()
-            } else if isScannerAvailable {
-                DataScannerView(
-                    detectedNumbers: $detectedNumbers,
-                    isScanning: $isScanning,
-                    isTorchOn: $isTorchOn,
-                    zoomFactor: $zoomFactor,
-                    capturedImage: $capturedImage,
-                    autoFreeze: autoFreeze,
-                    triggerCapture: $triggerManualCapture,
-                    onSelectNumber: { number in
-                        selectedNumber = number
-                    }
-                )
-                .ignoresSafeArea()
-            } else {
+            if !cameraManager.hasCameraPermission {
                 VStack(spacing: 16) {
                     Image(systemName: "camera.fill")
                         .font(.system(size: 60))
                         .foregroundColor(.gray)
-                    Text("Live Text Scanner Unavailable")
+                    Text("Camera Access Required")
                         .font(.headline)
                         .foregroundColor(.white)
                     Text("Please grant camera permissions in iOS Settings.")
@@ -59,204 +28,230 @@ public struct MainScannerView: View {
                         .foregroundColor(.gray)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
+                    Button("Open Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
                 }
-            }
+            } else {
+                // Viewport: Frozen photo OR Live Camera Preview
+                if let image = cameraManager.capturedImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipped()
+                        .ignoresSafeArea()
+                } else {
+                    CameraPreviewView(session: cameraManager.captureSession) { layer in
+                        cameraManager.previewLayer = layer
+                    }
+                    .ignoresSafeArea()
+                }
 
-            // Controls & Overlays
-            VStack {
-                // Top Navigation / Controls Bar
-                HStack {
-                    // Flashlight Button (active during live scan)
-                    if capturedImage == nil {
+                // On-screen bounding box & underline overlays
+                ScannerOverlayView(numbers: cameraManager.detectedNumbers) { num in
+                    selectedNumber = num
+                }
+                .ignoresSafeArea()
+
+                // Top Controls & Indicators Bar
+                VStack {
+                    HStack {
+                        // Torch Button (only active during live scan)
+                        if cameraManager.capturedImage == nil {
+                            Button(action: {
+                                cameraManager.toggleTorch()
+                            }) {
+                                Image(systemName: cameraManager.isTorchOn ? "flashlight.on.fill" : "flashlight.off.fill")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(cameraManager.isTorchOn ? .yellow : .white)
+                                    .frame(width: 44, height: 44)
+                                    .background(Color.black.opacity(0.6))
+                                    .clipShape(Circle())
+                            }
+                        } else {
+                            Color.clear.frame(width: 44, height: 44)
+                        }
+
+                        Spacer()
+
+                        // Country Code Prefix & Settings Button
                         Button(action: {
-                            isTorchOn.toggle()
+                            showSettings = true
                         }) {
-                            Image(systemName: isTorchOn ? "flashlight.on.fill" : "flashlight.off.fill")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(isTorchOn ? .yellow : .white)
+                            HStack(spacing: 4) {
+                                Image(systemName: "globe")
+                                    .font(.system(size: 12))
+                                Text(defaultCountryPrefix.isEmpty ? "+212" : defaultCountryPrefix)
+                                    .font(.system(size: 14, weight: .bold))
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(Color.black.opacity(0.6))
+                            .foregroundColor(.white)
+                            .cornerRadius(20)
+                        }
+
+                        Spacer()
+
+                        // Right Top Button: "Scan Again" when frozen, or Manual Freeze when live
+                        Button(action: {
+                            if cameraManager.capturedImage != nil {
+                                cameraManager.resetScan()
+                            } else {
+                                cameraManager.triggerManualFreeze()
+                            }
+                        }) {
+                            Image(systemName: cameraManager.capturedImage != nil ? "arrow.clockwise" : "camera.metering.spot")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundColor(cameraManager.capturedImage != nil ? .green : .white)
                                 .frame(width: 44, height: 44)
                                 .background(Color.black.opacity(0.6))
                                 .clipShape(Circle())
                         }
-                    } else {
-                        // Spacer placeholder to balance layout
-                        Color.clear.frame(width: 44, height: 44)
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 50)
 
-                    Spacer()
-
-                    // Country Prefix Indicator & Settings
-                    Button(action: {
-                        showSettings = true
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "globe")
-                                .font(.system(size: 12))
-                            Text(defaultCountryPrefix.isEmpty ? "+212" : defaultCountryPrefix)
-                                .font(.system(size: 14, weight: .bold))
+                    // Frozen Photo Status Badge
+                    if cameraManager.capturedImage != nil {
+                        HStack(spacing: 8) {
+                            Image(systemName: "snowflake")
+                                .font(.system(size: 12, weight: .bold))
+                            Text("PHOTO FROZEN — TAP A NUMBER OR SCAN AGAIN")
+                                .font(.system(size: 11, weight: .bold))
                         }
                         .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(Color.black.opacity(0.6))
-                        .foregroundColor(.white)
-                        .cornerRadius(20)
+                        .padding(.vertical, 6)
+                        .background(Color.orange.opacity(0.95))
+                        .foregroundColor(.black)
+                        .cornerRadius(10)
+                        .padding(.top, 6)
                     }
 
                     Spacer()
 
-                    // Freeze / Scan Again Top Button
-                    Button(action: {
-                        if capturedImage != nil || !isScanning {
-                            resetToLiveScan()
-                        } else {
-                            triggerManualCapture?()
-                        }
-                    }) {
-                        Image(systemName: (capturedImage != nil || !isScanning) ? "arrow.clockwise" : "camera.metering.spot")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundColor((capturedImage != nil || !isScanning) ? .green : .white)
-                            .frame(width: 44, height: 44)
-                            .background(Color.black.opacity(0.6))
-                            .clipShape(Circle())
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 50)
-
-                // Frozen Photo Badge
-                if capturedImage != nil || !isScanning {
-                    HStack(spacing: 8) {
-                        Image(systemName: "snowflake")
-                            .font(.system(size: 12, weight: .bold))
-                        Text("PHOTO FROZEN — SELECT A NUMBER BELOW")
-                            .font(.system(size: 11, weight: .bold))
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(Color.orange.opacity(0.95))
-                    .foregroundColor(.black)
-                    .cornerRadius(10)
-                    .padding(.top, 6)
-                }
-
-                Spacer()
-
-                // Center "Scan Another Label" Button when frozen
-                if capturedImage != nil || !isScanning {
-                    Button(action: resetToLiveScan) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 15, weight: .bold))
-                            Text("Scan Another Label")
-                                .font(.system(size: 15, weight: .bold))
-                        }
-                        .padding(.horizontal, 22)
-                        .padding(.vertical, 12)
-                        .background(Color.black.opacity(0.8))
-                        .foregroundColor(.white)
-                        .cornerRadius(24)
-                        .overlay(
-                            Capsule().stroke(Color.white.opacity(0.6), lineWidth: 1.5)
-                        )
-                        .shadow(color: .black.opacity(0.5), radius: 6, x: 0, y: 3)
-                    }
-                    .padding(.bottom, 12)
-                }
-
-                // Bottom Controls & Detected Numbers Section
-                VStack(spacing: 14) {
-                    // Zoom Presets & Manual Shutter Button (only shown during live scan)
-                    if capturedImage == nil {
-                        HStack(spacing: 24) {
-                            // Zoom Presets (1x, 2x, 3x)
-                            HStack(spacing: 12) {
-                                ForEach([1.0, 2.0, 3.0], id: \.self) { factor in
-                                    Button(action: {
-                                        zoomFactor = factor
-                                    }) {
-                                        Text("\(Int(factor))x")
-                                            .font(.system(size: 13, weight: .bold))
-                                            .frame(width: 38, height: 38)
-                                            .background(zoomFactor == factor ? Color.yellow : Color.black.opacity(0.65))
-                                            .foregroundColor(zoomFactor == factor ? .black : .white)
-                                            .clipShape(Circle())
-                                    }
-                                }
+                    // Center Floating "Scan Again" Button (Prominently displayed when frozen)
+                    if cameraManager.capturedImage != nil {
+                        Button(action: {
+                            cameraManager.resetScan()
+                        }) {
+                            HStack(spacing: 10) {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 18, weight: .bold))
+                                Text("Scan Again")
+                                    .font(.system(size: 18, weight: .bold))
                             }
-
-                            // Manual Shutter Button: freeze whenever ready
-                            Button(action: {
-                                let generator = UIImpactFeedbackGenerator(style: .medium)
-                                generator.impactOccurred()
-                                triggerManualCapture?()
-                            }) {
-                                ZStack {
-                                    Circle()
-                                        .stroke(Color.white, lineWidth: 3.5)
-                                        .frame(width: 60, height: 60)
-                                    Circle()
-                                        .fill(Color.white)
-                                        .frame(width: 48, height: 48)
-                                }
-                            }
+                            .padding(.horizontal, 28)
+                            .padding(.vertical, 14)
+                            .background(Color(red: 0.15, green: 0.78, blue: 0.35))
+                            .foregroundColor(.white)
+                            .cornerRadius(30)
+                            .shadow(color: .black.opacity(0.5), radius: 8, x: 0, y: 4)
                         }
+                        .padding(.bottom, 14)
                     }
 
-                    // Multi-Number Cards: Displays ALL detected numbers for easy selection
-                    if !detectedNumbers.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text("DETECTED NUMBERS (\(detectedNumbers.count)) — TAP TO SELECT")
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundColor(.white.opacity(0.9))
-                                Spacer()
-                            }
-                            .padding(.horizontal, 20)
-
-                            ScrollView(.horizontal, showsIndicators: false) {
+                    // Bottom Section: Zoom Presets, Shutter & Multi-Number Cards
+                    VStack(spacing: 14) {
+                        // Live Scanning Controls: Zoom Presets & Silent Shutter
+                        if cameraManager.capturedImage == nil {
+                            HStack(spacing: 24) {
+                                // Zoom Presets (0.5x Macro, 1x, 2x, 5x)
                                 HStack(spacing: 10) {
-                                    ForEach(detectedNumbers) { num in
+                                    ForEach(CameraManager.ZoomPreset.allCases) { preset in
                                         Button(action: {
-                                            let generator = UIImpactFeedbackGenerator(style: .medium)
-                                            generator.impactOccurred()
-                                            selectedNumber = num
+                                            cameraManager.setZoomPreset(preset)
                                         }) {
-                                            HStack(spacing: 8) {
-                                                Image(systemName: "phone.fill")
-                                                    .font(.system(size: 13, weight: .bold))
-                                                    .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
-                                                Text(num.cleanNumber)
-                                                    .font(.system(size: 16, weight: .bold, design: .monospaced))
-                                                    .foregroundColor(.white)
-                                                Image(systemName: "arrow.up.right.circle.fill")
-                                                    .font(.system(size: 14))
-                                                    .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
-                                            }
-                                            .padding(.horizontal, 14)
-                                            .padding(.vertical, 10)
-                                            .background(Color.black.opacity(0.85))
-                                            .cornerRadius(12)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .stroke(Color(red: 0.15, green: 0.78, blue: 0.35).opacity(0.85), lineWidth: 1.5)
-                                            )
+                                            Text(preset.rawValue)
+                                                .font(.system(size: 12, weight: .bold))
+                                                .frame(width: 40, height: 40)
+                                                .background(cameraManager.currentZoomPreset == preset ? Color.yellow : Color.black.opacity(0.65))
+                                                .foregroundColor(cameraManager.currentZoomPreset == preset ? .black : .white)
+                                                .clipShape(Circle())
                                         }
                                     }
                                 }
-                                .padding(.horizontal, 16)
+
+                                // Manual Silent Shutter Button
+                                Button(action: {
+                                    cameraManager.triggerManualFreeze()
+                                }) {
+                                    ZStack {
+                                        Circle()
+                                            .stroke(Color.white, lineWidth: 3.5)
+                                            .frame(width: 58, height: 58)
+                                        Circle()
+                                            .fill(Color.white)
+                                            .frame(width: 46, height: 46)
+                                    }
+                                }
                             }
                         }
-                    } else if capturedImage != nil {
-                        Text("No phone numbers found. Tap 'Scan Another Label' to retry.")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.white.opacity(0.8))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(Color.black.opacity(0.75))
-                            .cornerRadius(10)
+
+                        // Multi-Number Cards: Displays ALL detected numbers simultaneously
+                        if !cameraManager.detectedNumbers.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text("DETECTED NUMBERS (\(cameraManager.detectedNumbers.count)) — TAP TO SELECT")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(.white.opacity(0.9))
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 20)
+
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 10) {
+                                        ForEach(cameraManager.detectedNumbers) { num in
+                                            Button(action: {
+                                                let generator = UIImpactFeedbackGenerator(style: .medium)
+                                                generator.impactOccurred()
+                                                selectedNumber = num
+                                            }) {
+                                                HStack(spacing: 8) {
+                                                    Image(systemName: "phone.fill")
+                                                        .font(.system(size: 13, weight: .bold))
+                                                        .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                                                    Text(num.cleanNumber)
+                                                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                                                        .foregroundColor(.white)
+                                                    Image(systemName: "arrow.up.right.circle.fill")
+                                                        .font(.system(size: 14))
+                                                        .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                                                }
+                                                .padding(.horizontal, 14)
+                                                .padding(.vertical, 10)
+                                                .background(Color.black.opacity(0.85))
+                                                .cornerRadius(12)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 12)
+                                                        .stroke(Color(red: 0.15, green: 0.78, blue: 0.35).opacity(0.85), lineWidth: 1.5)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    .padding(.horizontal, 16)
+                                }
+                            }
+                        } else if cameraManager.capturedImage != nil {
+                            Text("No phone numbers found. Tap 'Scan Again' to retry.")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.white.opacity(0.8))
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(Color.black.opacity(0.75))
+                                .cornerRadius(10)
+                        }
                     }
+                    .padding(.bottom, 36)
                 }
-                .padding(.bottom, 36)
             }
 
             // Action Bottom Sheet
@@ -281,18 +276,14 @@ public struct MainScannerView: View {
                 .transition(.move(edge: .bottom))
             }
         }
+        .onAppear {
+            cameraManager.autoFreeze = autoFreeze
+        }
+        .onChange(of: autoFreeze) { newValue in
+            cameraManager.autoFreeze = newValue
+        }
         .sheet(isPresented: $showSettings) {
             SettingsSheetView(defaultCountryPrefix: $defaultCountryPrefix)
-        }
-    }
-
-    private func resetToLiveScan() {
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
-        withAnimation(.easeInOut(duration: 0.2)) {
-            capturedImage = nil
-            detectedNumbers = []
-            isScanning = true
         }
     }
 }

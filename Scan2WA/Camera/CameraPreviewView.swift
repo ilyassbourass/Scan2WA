@@ -30,7 +30,11 @@ public struct CameraPreviewView: UIViewRepresentable {
         view.backgroundColor = .black
         view.previewLayer.session = session
         view.previewLayer.videoGravity = .resizeAspectFill
-        view.previewLayer.connection?.videoOrientation = .portrait
+        if #available(iOS 17.0, *) {
+            view.previewLayer.connection?.videoRotationAngle = 90
+        } else {
+            view.previewLayer.connection?.videoOrientation = .portrait
+        }
 
         DispatchQueue.main.async {
             onLayerAvailable(view.previewLayer)
