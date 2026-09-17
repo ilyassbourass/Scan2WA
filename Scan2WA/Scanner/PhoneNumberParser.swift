@@ -1,5 +1,6 @@
 import Foundation
 import CoreGraphics
+import Vision
 
 public final class PhoneNumberParser {
     public static let shared = PhoneNumberParser()
@@ -17,8 +18,12 @@ public final class PhoneNumberParser {
 
     private init() {}
 
-    /// Extracts potential phone numbers from a string
-    public func extractPhoneNumbers(from text: String, boundingBox: CGRect) -> [RecognizedNumber] {
+    /// Extracts potential phone numbers from a string with exact character-level bounding box
+    public func extractPhoneNumbers(
+        from text: String,
+        candidate: VNRecognizedText? = nil,
+        boundingBox: CGRect
+    ) -> [RecognizedNumber] {
         var results: [RecognizedNumber] = []
         var detectedCleanStrings = Set<String>()
 
@@ -36,11 +41,19 @@ public final class PhoneNumberParser {
                     let cleaned = cleanDigits(phoneNumber)
                     if isValidPhoneNumber(cleaned) && !detectedCleanStrings.contains(cleaned) {
                         detectedCleanStrings.insert(cleaned)
+
+                        var preciseBox = boundingBox
+                        if let candidate = candidate,
+                           let strRange = Range(match.range, in: text),
+                           let subObs = try? candidate.boundingBox(for: strRange) {
+                            preciseBox = subObs.boundingBox
+                        }
+
                         results.append(RecognizedNumber(
                             rawText: phoneNumber,
                             cleanNumber: cleaned,
                             formattedDisplay: formatDisplay(cleaned),
-                            boundingBox: boundingBox
+                            boundingBox: preciseBox
                         ))
                     }
                 }
@@ -56,11 +69,19 @@ public final class PhoneNumberParser {
                 let cleaned = cleanDigits(matchString)
                 if isValidPhoneNumber(cleaned) && !detectedCleanStrings.contains(cleaned) {
                     detectedCleanStrings.insert(cleaned)
+
+                    var preciseBox = boundingBox
+                    if let candidate = candidate,
+                       let strRange = Range(match.range, in: text),
+                       let subObs = try? candidate.boundingBox(for: strRange) {
+                        preciseBox = subObs.boundingBox
+                    }
+
                     results.append(RecognizedNumber(
                         rawText: matchString,
                         cleanNumber: cleaned,
                         formattedDisplay: formatDisplay(cleaned),
-                        boundingBox: boundingBox
+                        boundingBox: preciseBox
                     ))
                 }
             }

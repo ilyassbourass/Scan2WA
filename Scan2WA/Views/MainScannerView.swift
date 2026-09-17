@@ -40,7 +40,13 @@ public struct MainScannerView: View {
                     .cornerRadius(10)
                 }
             } else {
-                // Viewport: Frozen photo OR Live Camera Preview
+                // Viewport: Camera Preview always mounted underneath
+                CameraPreviewView(session: cameraManager.captureSession) { layer in
+                    cameraManager.previewLayer = layer
+                }
+                .ignoresSafeArea()
+
+                // Frozen photo overlay (when frozen)
                 if let image = cameraManager.capturedImage {
                     Image(uiImage: image)
                         .resizable()
@@ -48,11 +54,6 @@ public struct MainScannerView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .clipped()
                         .ignoresSafeArea()
-                } else {
-                    CameraPreviewView(session: cameraManager.captureSession) { layer in
-                        cameraManager.previewLayer = layer
-                    }
-                    .ignoresSafeArea()
                 }
 
                 // On-screen bounding box & underline overlays

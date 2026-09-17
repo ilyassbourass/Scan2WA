@@ -40,9 +40,10 @@ public final class VisionTextRecognizer {
                     guard let topCandidate = observation.topCandidates(1).first else { continue }
                     let string = topCandidate.string
 
-                    // Check for phone numbers in candidate text
+                    // Check for phone numbers in candidate text with sub-string bounding box
                     let parsed = self.parser.extractPhoneNumbers(
                         from: string,
+                        candidate: topCandidate,
                         boundingBox: observation.boundingBox
                     )
                     detectedNumbers.append(contentsOf: parsed)
@@ -115,6 +116,7 @@ public final class VisionTextRecognizer {
 
                     let parsed = self.parser.extractPhoneNumbers(
                         from: string,
+                        candidate: topCandidate,
                         boundingBox: observation.boundingBox
                     )
                     detectedNumbers.append(contentsOf: parsed)

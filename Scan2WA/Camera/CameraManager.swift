@@ -23,6 +23,7 @@ public final class CameraManager: NSObject, ObservableObject {
     private var isFreezing: Bool = false
     private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
     private var latestPixelBuffer: CVPixelBuffer?
+    private var videoFrameSize: CGSize = CGSize(width: 1080, height: 1920)
 
     public enum ZoomPreset: String, CaseIterable, Identifiable {
         case macro = "0.5x"
@@ -298,10 +299,18 @@ public final class CameraManager: NSObject, ObservableObject {
                 // Perform secondary high-res OCR pass on the upright frozen photo
                 VisionTextRecognizer.shared.processImage(image) { [weak self] allNumbers in
                     guard let self = self else { return }
+                    var viewSize = self.previewLayer?.bounds.size ?? .zero
+                    if viewSize.width <= 0 || viewSize.height <= 0 {
+                        viewSize = UIScreen.main.bounds.size
+                    }
                     for n in allNumbers {
-                        if self.trackedNumbersMap[n.cleanNumber] == nil {
-                            self.trackedNumbersMap[n.cleanNumber] = n
-                        }
+                        var updated = n
+                        updated.screenRect = self.convertVisionRectToScreen(
+                            n.boundingBox,
+                            viewSize: viewSize,
+                            imageSize: image.size
+                        )
+                        self.trackedNumbersMap[n.cleanNumber] = updated
                     }
                     self.detectedNumbers = Array(self.trackedNumbersMap.values)
                 }
@@ -309,15 +318,66 @@ public final class CameraManager: NSObject, ObservableObject {
         }
     }
 
-    public func updateDetectionsWithTracking(_ rawDetections: [RecognizedNumber]) {
-        guard let layer = previewLayer, layer.bounds.width > 0, layer.bounds.height > 0 else { return }
+    /// Converts normalized Vision bounding box (bottom-left origin) to view screen coordinates
+    public func convertVisionRectToScreen(
+        _ boundingBox: CGRect,
+        viewSize: CGSize,
+        imageSize: CGSize
+    ) -> CGRect {
+        guard viewSize.width > 0, viewSize.height > 0, imageSize.width > 0, imageSize.height > 0 else {
+            return .zero
+        }
 
-        let transform = CGAffineTransform(scaleX: 1, y: -1).translatedBy(x: 0, y: -1)
+        let imageAspect = imageSize.width / imageSize.height
+        let viewAspect = viewSize.width / viewSize.height
+
+        let scale: CGFloat
+        let offsetX: CGFloat
+        let offsetY: CGFloat
+
+        if imageAspect > viewAspect {
+            // Image is wider than view: scaled to match view height, cropped on sides
+            scale = viewSize.height / imageSize.height
+            let scaledWidth = imageSize.width * scale
+            offsetX = (viewSize.width - scaledWidth) / 2.0
+            offsetY = 0.0
+        } else {
+            // Image is taller than view: scaled to match view width, cropped top/bottom
+            scale = viewSize.width / imageSize.width
+            let scaledHeight = imageSize.height * scale
+            offsetX = 0.0
+            offsetY = (viewSize.height - scaledHeight) / 2.0
+        }
+
+        // Vision: origin (0,0) is bottom-left, convert Y to top-left for UIKit/SwiftUI
+        let pixelX = boundingBox.origin.x * imageSize.width
+        let pixelY = (1.0 - boundingBox.origin.y - boundingBox.size.height) * imageSize.height
+        let pixelWidth = boundingBox.size.width * imageSize.width
+        let pixelHeight = boundingBox.size.height * imageSize.height
+
+        let screenX = pixelX * scale + offsetX
+        let screenY = pixelY * scale + offsetY
+        let screenWidth = pixelWidth * scale
+        let screenHeight = pixelHeight * scale
+
+        return CGRect(x: screenX, y: screenY, width: screenWidth, height: screenHeight)
+    }
+
+    public func updateDetectionsWithTracking(_ rawDetections: [RecognizedNumber]) {
+        var viewSize = previewLayer?.bounds.size ?? .zero
+        if viewSize.width <= 0 || viewSize.height <= 0 {
+            viewSize = UIScreen.main.bounds.size
+        }
+        guard viewSize.width > 0, viewSize.height > 0 else { return }
+
         let now = Date()
 
         for detection in rawDetections {
-            let metadataRect = detection.boundingBox.applying(transform)
-            let rawScreenRect = layer.layerRectConverted(fromMetadataOutputRect: metadataRect)
+            let rawScreenRect = convertVisionRectToScreen(
+                detection.boundingBox,
+                viewSize: viewSize,
+                imageSize: videoFrameSize
+            )
 
             guard !rawScreenRect.isNull, !rawScreenRect.isInfinite, rawScreenRect.width > 10 else { continue }
 
@@ -372,8 +432,11 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         guard !isPaused, capturedImage == nil else { return }
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
-        // Retain latest pixel buffer for silent capture
+        // Retain latest pixel buffer and update frame size dynamically
         self.latestPixelBuffer = pixelBuffer
+        let width = CGFloat(CVPixelBufferGetWidth(pixelBuffer))
+        let height = CGFloat(CVPixelBufferGetHeight(pixelBuffer))
+        self.videoFrameSize = CGSize(width: min(width, height), height: max(width, height))
 
         VisionTextRecognizer.shared.processFrame(sampleBuffer) { [weak self] numbers in
             guard let self = self, !self.isPaused, self.capturedImage == nil else { return }
