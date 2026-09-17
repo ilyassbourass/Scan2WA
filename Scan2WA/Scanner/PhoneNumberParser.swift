@@ -83,41 +83,45 @@ public final class PhoneNumberParser {
         return result
     }
 
-    /// Verifies valid phone number structure (rejects serial/package codes like 0123777-26)
+    /// Verifies valid phone number structure (rejects serial/package codes, barcodes, timestamps)
     public func isValidPhoneNumber(_ cleaned: String) -> Bool {
         let digitsOnly = cleaned.filter { $0.isNumber }
         let count = digitsOnly.count
 
-        // Real phone numbers are typically 9 to 14 digits
-        guard count >= 9 && count <= 14 else { return false }
+        // Real phone numbers are typically 9 to 15 digits
+        guard count >= 9 && count <= 15 else { return false }
 
-        // If local 10-digit number starting with 0:
+        // 1. Moroccan numbers starting with local 0: (e.g. 0605922827, 0767557451, 0522123456)
         if digitsOnly.count == 10 && digitsOnly.hasPrefix("0") {
-            // For Moroccan mobile / landlines: must start with 05, 06, or 07
-            // Rejects 01, 02, 03, 04, 08, 09 (which are invoice/barcode numbers like 0123777-26)
             let prefix2 = String(digitsOnly.prefix(2))
-            if prefix2 == "05" || prefix2 == "06" || prefix2 == "07" {
-                return true
+            return prefix2 == "05" || prefix2 == "06" || prefix2 == "07" || prefix2 == "08"
+        }
+
+        // 2. Moroccan international numbers starting with +212, 212, or 00212:
+        // e.g. +212 718-644473, +212 708-769358, 212605922827
+        if cleaned.hasPrefix("+212") || digitsOnly.hasPrefix("212") || digitsOnly.hasPrefix("00212") {
+            var withoutCode = digitsOnly
+            if withoutCode.hasPrefix("00212") {
+                withoutCode = String(withoutCode.dropFirst(5))
+            } else if withoutCode.hasPrefix("212") {
+                withoutCode = String(withoutCode.dropFirst(3))
             }
-            // For French numbers: 01-09
+            // After 212, Moroccan numbers have exactly 9 digits starting with 5, 6, 7, or 8
+            if withoutCode.count == 9 {
+                let firstDigit = String(withoutCode.prefix(1))
+                return firstDigit == "5" || firstDigit == "6" || firstDigit == "7" || firstDigit == "8"
+            }
             return false
         }
 
-        // If starting with international code +212:
-        if cleaned.hasPrefix("+212") || digitsOnly.hasPrefix("212") {
-            let withoutPrefix = digitsOnly.hasPrefix("212") ? String(digitsOnly.dropFirst(3)) : digitsOnly
-            if withoutPrefix.hasPrefix("5") || withoutPrefix.hasPrefix("6") || withoutPrefix.hasPrefix("7") {
-                return withoutPrefix.count == 9
-            }
+        // 3. Generic international numbers starting with '+' (e.g. +1, +33, +44, +971, +966)
+        if cleaned.hasPrefix("+") {
+            return count >= 10 && count <= 15
         }
 
-        // Generic international numbers (+1, +33, +44, etc.)
-        if cleaned.hasPrefix("+") && count >= 10 {
-            return true
-        }
-
-        // Any valid 10-digit number
-        return count == 10
+        // Numbers without '+' and without leading '0' are not valid Moroccan/international phone numbers
+        // (This strictly rejects barcodes, tracking numbers, timestamps like 1234567890 or 0123777-26)
+        return false
     }
 
     /// Formats phone number for clean readability

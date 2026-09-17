@@ -198,6 +198,10 @@ public final class CameraManager: NSObject, ObservableObject {
         }
     }
 
+    private var firstStableDetectionDate: Date? = nil
+    private var consecutiveDetectionCount: Int = 0
+    private var lastStableNumbersKey: String = ""
+
     public func triggerManualFreeze() {
         guard let buffer = latestPixelBuffer else { return }
         performFreeze(with: buffer)
@@ -210,6 +214,9 @@ public final class CameraManager: NSObject, ObservableObject {
         freezeWorkItem?.cancel()
         freezeWorkItem = nil
         isFreezing = false
+        firstStableDetectionDate = nil
+        consecutiveDetectionCount = 0
+        lastStableNumbersKey = ""
         trackedNumbersMap.removeAll()
         trackedRects.removeAll()
         detectedNumbers.removeAll()
@@ -221,27 +228,43 @@ public final class CameraManager: NSObject, ObservableObject {
     private func handleDetectedNumbers(_ rawDetections: [RecognizedNumber], from pixelBuffer: CVPixelBuffer) {
         updateDetectionsWithTracking(rawDetections)
 
-        guard autoFreeze, !rawDetections.isEmpty, !isFreezing, capturedImage == nil else { return }
+        guard autoFreeze, capturedImage == nil, !isFreezing else { return }
 
-        // If 2 or more numbers are detected (e.g. Expéditeur & Destinataire): freeze IMMEDIATELY!
-        if rawDetections.count >= 2 {
-            freezeWorkItem?.cancel()
-            freezeWorkItem = nil
-            performFreeze(with: pixelBuffer)
+        if rawDetections.isEmpty {
+            if consecutiveDetectionCount > 0 {
+                consecutiveDetectionCount -= 1
+            }
+            if consecutiveDetectionCount == 0 {
+                firstStableDetectionDate = nil
+                lastStableNumbersKey = ""
+            }
             return
         }
 
-        // If 1 number detected: start a 0.35s one-shot timer if not already running.
-        // DO NOT CANCEL on subsequent frames! This guarantees it will freeze without requiring camera motion!
-        if freezeWorkItem == nil {
-            let workItem = DispatchWorkItem { [weak self] in
-                guard let self = self, !self.isPaused, self.capturedImage == nil else { return }
-                if let buffer = self.latestPixelBuffer {
-                    self.performFreeze(with: buffer)
-                }
-            }
-            freezeWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: workItem)
+        // Generate a sorted signature of all valid detected numbers in this frame
+        let currentNumbersKey = rawDetections.map { $0.cleanNumber }.sorted().joined(separator: ",")
+
+        if currentNumbersKey == lastStableNumbersKey {
+            consecutiveDetectionCount += 1
+        } else {
+            // New number(s) seen: start steady aiming window
+            lastStableNumbersKey = currentNumbersKey
+            consecutiveDetectionCount = 1
+            firstStableDetectionDate = Date()
+        }
+
+        if firstStableDetectionDate == nil {
+            firstStableDetectionDate = Date()
+        }
+
+        let elapsed = Date().timeIntervalSince(firstStableDetectionDate!)
+
+        // AUTO-FREEZE CONDITIONS:
+        // Must be held steady over the phone number for at least 0.9 seconds
+        // and verified across at least 8 consecutive video frames.
+        // This guarantees camera focus is sharp, text is confirmed real, and avoids instant 1-frame glitches!
+        if elapsed >= 0.9 && consecutiveDetectionCount >= 8 {
+            performFreeze(with: pixelBuffer)
         }
     }
 
@@ -256,7 +279,12 @@ public final class CameraManager: NSObject, ObservableObject {
                 DispatchQueue.main.async { self.isFreezing = false }
                 return
             }
-            let image = UIImage(cgImage: cgImage, scale: 1.0, orientation: .right)
+
+            // CRITICAL ORIENTATION CHECK:
+            // If the buffer width < height, the buffer is ALREADY portrait, so orientation is .up!
+            // Only if width > height (landscape) does it need .right!
+            let orientation: UIImage.Orientation = (cgImage.width < cgImage.height) ? .up : .right
+            let image = UIImage(cgImage: cgImage, scale: 1.0, orientation: orientation)
 
             DispatchQueue.main.async {
                 let haptic = UINotificationFeedbackGenerator()
@@ -267,7 +295,7 @@ public final class CameraManager: NSObject, ObservableObject {
                 self.isFreezing = false
                 self.freezeWorkItem = nil
 
-                // Perform secondary high-res OCR pass on the frozen photo to catch any additional numbers
+                // Perform secondary high-res OCR pass on the upright frozen photo
                 VisionTextRecognizer.shared.processImage(image) { [weak self] allNumbers in
                     guard let self = self else { return }
                     for n in allNumbers {

@@ -67,8 +67,9 @@ public final class VisionTextRecognizer {
             request.recognitionLevel = .accurate
             request.usesLanguageCorrection = false
             request.recognitionLanguages = ["en-US", "fr-FR", "es-ES", "ar"]
-
-            let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .right, options: [:])
+            let isPortrait = CVPixelBufferGetWidth(pixelBuffer) < CVPixelBufferGetHeight(pixelBuffer)
+            let orientation: CGImagePropertyOrientation = isPortrait ? .up : .right
+            let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: orientation, options: [:])
             try? handler.perform([request])
         }
     }
