@@ -66,4 +66,4 @@ jobs:
           - **Direct WhatsApp Business routing**: Using 'whatsapp-smb://' to enter chat directly without confirmation popups.
           - **Personal WhatsApp routing**: Direct 'whatsapp-consumer://' deep link.
           - **Dual SIM Calling**: In-app guidance and 1-tap deep link to iOS Cellular settings for default SIM line." \
-            --clobber || true
+            || true
