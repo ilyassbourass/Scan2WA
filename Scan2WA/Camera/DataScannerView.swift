@@ -47,9 +47,10 @@ public struct DataScannerView: UIViewControllerRepresentable {
         context.coordinator.scanner = scanner
 
         // Provide capture trigger closure to parent
+        let coordinator = context.coordinator
         DispatchQueue.main.async {
-            self.triggerCapture = { [weak context] in
-                context?.coordinator.performCapture()
+            self.triggerCapture = { [weak coordinator] in
+                coordinator?.performCapture()
             }
         }
 
