@@ -366,6 +366,9 @@ public struct MainScannerView: View {
                 PackagePhotoCaptureView(
                     phoneNumber: num,
                     cleanNumber: num,
+                    onSaved: { _ in
+                        cameraManager.resetScan()
+                    },
                     onDismiss: {
                         showPackageCapture = false
                         packageNumberToCapture = nil

@@ -412,6 +412,13 @@ fileprivate final class PackageCameraManager: NSObject, ObservableObject, AVCapt
 
             if self.session.canAddOutput(self.photoOutput) {
                 self.session.addOutput(self.photoOutput)
+                if let connection = self.photoOutput.connection(with: .video) {
+                    if #available(iOS 17.0, *), connection.isVideoRotationAngleSupported(90) {
+                        connection.videoRotationAngle = 90
+                    } else if connection.isVideoOrientationSupported {
+                        connection.videoOrientation = .portrait
+                    }
+                }
             }
 
             self.session.commitConfiguration()
@@ -448,19 +455,34 @@ fileprivate final class PackageCameraManager: NSObject, ObservableObject, AVCapt
 
     func capturePhoto(completion: @escaping (UIImage) -> Void) {
         self.photoCompletion = completion
-        let settings = AVCapturePhotoSettings()
-        photoOutput.capturePhoto(with: settings, delegate: self)
+        cameraQueue.async { [weak self] in
+            guard let self = self else { return }
+            if let connection = self.photoOutput.connection(with: .video) {
+                if #available(iOS 17.0, *), connection.isVideoRotationAngleSupported(90) {
+                    connection.videoRotationAngle = 90
+                } else if connection.isVideoOrientationSupported {
+                    connection.videoOrientation = .portrait
+                }
+            }
+            let settings = AVCapturePhotoSettings()
+            self.photoOutput.capturePhoto(with: settings, delegate: self)
+        }
     }
 
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
+        let callback = self.photoCompletion
+        self.photoCompletion = nil
+
         guard error == nil,
               let data = photo.fileDataRepresentation(),
-              let image = UIImage(data: data) else {
+              let rawImage = UIImage(data: data) else {
             return
         }
 
+        let normalized = rawImage.fixOrientation()
+
         DispatchQueue.main.async {
-            self.photoCompletion?(image)
+            callback?(normalized)
         }
     }
 }
@@ -478,6 +500,13 @@ fileprivate class PackageVideoPreviewUIView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         previewLayer.frame = bounds
+        if let conn = previewLayer.connection {
+            if #available(iOS 17.0, *), conn.isVideoRotationAngleSupported(90) {
+                conn.videoRotationAngle = 90
+            } else if conn.isVideoOrientationSupported {
+                conn.videoOrientation = .portrait
+            }
+        }
     }
 }
 
@@ -489,15 +518,31 @@ fileprivate struct PackageCameraPreviewView: UIViewRepresentable {
         view.backgroundColor = .black
         view.previewLayer.session = session
         view.previewLayer.videoGravity = .resizeAspectFill
-        if #available(iOS 17.0, *) {
-            view.previewLayer.connection?.videoRotationAngle = 90
-        } else {
-            view.previewLayer.connection?.videoOrientation = .portrait
+        if let conn = view.previewLayer.connection {
+            if #available(iOS 17.0, *), conn.isVideoRotationAngleSupported(90) {
+                conn.videoRotationAngle = 90
+            } else if conn.isVideoOrientationSupported {
+                conn.videoOrientation = .portrait
+            }
         }
         return view
     }
 
     func updateUIView(_ uiView: PackageVideoPreviewUIView, context: Context) {
         uiView.previewLayer.frame = uiView.bounds
+    }
+}
+
+// MARK: - UIImage Orientation Normalizer
+fileprivate extension UIImage {
+    func fixOrientation() -> UIImage {
+        if self.imageOrientation == .up {
+            return self
+        }
+        UIGraphicsBeginImageContextWithOptions(self.size, false, self.scale)
+        self.draw(in: CGRect(origin: .zero, size: self.size))
+        let normalizedImage = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+        return normalizedImage ?? self
     }
 }

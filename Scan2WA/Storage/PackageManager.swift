@@ -11,6 +11,8 @@ public final class PackageManager: ObservableObject {
     private let packagesFileName = "packages.json"
     private let photosDirName = "PackagePhotos"
 
+    private let photoCache = NSCache<NSString, UIImage>()
+
     private var documentsDirectory: URL {
         fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
     }
@@ -83,6 +85,9 @@ public final class PackageManager: ObservableObject {
             return nil
         }
 
+        // Cache in memory for instant high-fps display
+        photoCache.setObject(image, forKey: fileName as NSString)
+
         let newPackage = PackageModel(
             id: packageId,
             phoneNumber: phoneNumber,
@@ -94,9 +99,14 @@ public final class PackageManager: ObservableObject {
             status: status
         )
 
-        DispatchQueue.main.async {
+        if Thread.isMainThread {
             self.packages.insert(newPackage, at: 0)
             self.persistPackages()
+        } else {
+            DispatchQueue.main.async {
+                self.packages.insert(newPackage, at: 0)
+                self.persistPackages()
+            }
         }
 
         return newPackage
@@ -122,6 +132,7 @@ public final class PackageManager: ObservableObject {
     public func deletePackage(id: UUID) {
         if let index = packages.firstIndex(where: { $0.id == id }) {
             let package = packages[index]
+            photoCache.removeObject(forKey: package.photoFileName as NSString)
             let photoURL = photosDirectoryURL.appendingPathComponent(package.photoFileName)
             try? fileManager.removeItem(at: photoURL)
             packages.remove(at: index)
@@ -129,11 +140,18 @@ public final class PackageManager: ObservableObject {
         }
     }
 
-    /// Loads the photo for a package from disk
+    /// Loads the photo for a package from cache or disk
     public func loadPhoto(fileName: String) -> UIImage? {
+        if let cached = photoCache.object(forKey: fileName as NSString) {
+            return cached
+        }
         let photoURL = photosDirectoryURL.appendingPathComponent(fileName)
         guard fileManager.fileExists(atPath: photoURL.path) else { return nil }
-        return UIImage(contentsOfFile: photoURL.path)
+        if let image = UIImage(contentsOfFile: photoURL.path) {
+            photoCache.setObject(image, forKey: fileName as NSString)
+            return image
+        }
+        return nil
     }
 
     /// Returns packages filtered by search query and optional status tab

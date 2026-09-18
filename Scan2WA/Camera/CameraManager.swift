@@ -425,21 +425,25 @@ public final class CameraManager: NSObject, ObservableObject {
                 updated.lastSeen = now
                 trackedNumbersMap[key] = updated
             }
-
-            // Save to recent list
-            if !recentNumbers.contains(detection) {
-                recentNumbers.insert(detection, at: 0)
-                if recentNumbers.count > 20 {
-                    recentNumbers.removeLast()
-                }
-            }
         }
 
         // Prune numbers not seen for more than 0.7s to prevent sudden flickering
         trackedNumbersMap = trackedNumbersMap.filter { now.timeIntervalSince($0.value.lastSeen) < 0.7 }
         trackedRects = trackedRects.filter { trackedNumbersMap.keys.contains($0.key) }
 
-        self.detectedNumbers = Array(trackedNumbersMap.values)
+        let finalNumbers = Array(trackedNumbersMap.values)
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.detectedNumbers = finalNumbers
+            for detection in rawDetections {
+                if !self.recentNumbers.contains(detection) {
+                    self.recentNumbers.insert(detection, at: 0)
+                    if self.recentNumbers.count > 20 {
+                        self.recentNumbers.removeLast()
+                    }
+                }
+            }
+        }
     }
 }
 

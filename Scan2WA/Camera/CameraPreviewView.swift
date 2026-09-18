@@ -14,6 +14,13 @@ public struct CameraPreviewView: UIViewRepresentable {
         public override func layoutSubviews() {
             super.layoutSubviews()
             previewLayer.frame = bounds
+            if let conn = previewLayer.connection {
+                if #available(iOS 17.0, *), conn.isVideoRotationAngleSupported(90) {
+                    conn.videoRotationAngle = 90
+                } else if conn.isVideoOrientationSupported {
+                    conn.videoOrientation = .portrait
+                }
+            }
         }
     }
 
@@ -30,10 +37,12 @@ public struct CameraPreviewView: UIViewRepresentable {
         view.backgroundColor = .black
         view.previewLayer.session = session
         view.previewLayer.videoGravity = .resizeAspectFill
-        if #available(iOS 17.0, *) {
-            view.previewLayer.connection?.videoRotationAngle = 90
-        } else {
-            view.previewLayer.connection?.videoOrientation = .portrait
+        if let conn = view.previewLayer.connection {
+            if #available(iOS 17.0, *), conn.isVideoRotationAngleSupported(90) {
+                conn.videoRotationAngle = 90
+            } else if conn.isVideoOrientationSupported {
+                conn.videoOrientation = .portrait
+            }
         }
 
         DispatchQueue.main.async {
