@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 
 public enum DeliveryStatus: String, Codable, CaseIterable, Identifiable {
+    case confirme = "Confirmé"
     case livre = "Livré"
     case reporte = "Reporté"
     case annule = "Annulé"
@@ -10,6 +11,7 @@ public enum DeliveryStatus: String, Codable, CaseIterable, Identifiable {
 
     public var iconName: String {
         switch self {
+        case .confirme: return "checkmark.seal.fill"
         case .livre: return "checkmark.circle.fill"
         case .reporte: return "clock.arrow.circlepath"
         case .annule: return "xmark.circle.fill"
@@ -18,9 +20,19 @@ public enum DeliveryStatus: String, Codable, CaseIterable, Identifiable {
 
     public var color: Color {
         switch self {
+        case .confirme: return Color(red: 0.12, green: 0.53, blue: 0.95) // Royal Blue
         case .livre: return Color(red: 0.15, green: 0.78, blue: 0.35) // Emerald Green
         case .reporte: return Color(red: 1.0, green: 0.65, blue: 0.0) // Warm Orange / Amber
         case .annule: return Color(red: 0.95, green: 0.25, blue: 0.25) // Vibrant Red
+        }
+    }
+
+    public var textColorOnStatus: Color {
+        switch self {
+        case .confirme: return .white
+        case .livre: return .black
+        case .reporte: return .black
+        case .annule: return .white
         }
     }
 

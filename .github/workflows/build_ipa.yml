@@ -53,23 +53,24 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create v1.9.1 build/Scan2WA.ipa \
-            --title "Scan2WA v1.9.1 (End-to-End Verified: Thread-Safe, NSCache, Upright Photo Capture & Statuses)" \
-            --notes "### Scan2WA v1.9.1 (End-to-End Audited & Verified Build)
-          
+          gh release create v1.9.2 build/Scan2WA.ipa \
+            --title "Scan2WA v1.9.2 (Added Confirmé Status with Blue Theme, Plus Livré, Reporté, Annulé)" \
+            --notes "### Scan2WA v1.9.2
+
           Ready-to-sideload unsigned IPA for **LiveContainer** / AltStore / SideStore on iPhone 15 Pro Max.
-          
-          **End-to-End Verification & Fixes in v1.9.1:**
-          - **100% Main-Actor Thread Safety**:
-            - All updates to \`detectedNumbers\` and \`recentNumbers\` are guaranteed to run strictly on the main thread, eliminating background publisher runtime warnings and UI glitches.
-          - **Upright Package Photo Capture**:
-            - Configured \`photoOutput\` connection orientation explicitly to portrait and implemented \`UIImage.fixOrientation()\` so captured package photos are never sideways or inverted.
-          - **Instant In-Memory Photo Cache (NSCache)**:
-            - Smooth 120Hz ProMotion scrolling in the Packages list with zero disk read lag when browsing package inventory.
-          - **Seamless Scanner Reset**:
-            - Saving a package now automatically unfreezes and resets the main scanner, making it instantly ready to scan the next package label.
-          - **All v1.9.0 Delivery Status & Battery Features Intact**:
-            - 🟢 Livré, 🟠 Reporté, 🔴 Annulé color-coded tags and filtering.
-            - Full battery preservation (camera pauses in background and sub-screens).
-            - Tap-outside, interactive scroll, and toolbar 'Done' keyboard dismissal." \
+
+          **What's New in v1.9.2:**
+          - **Added 'Confirmé' Delivery Status**:
+            - **🔵 Confirmé** (Order / Call Confirmed): Royal Blue theme (\`#1E88E5\`) with verified seal icon (\`checkmark.seal.fill\`).
+            - Alongside **🟢 Livré** (Delivered), **🟠 Reporté** (Postponed), and **🔴 Annulé** (Cancelled).
+            - Now choose between all 4 statuses directly when photographing or editing packages.
+            - Filter by 'Confirmé' tab in the Packages inventory with live counter badge.
+            - 1-tap quick status switcher directly on each package card.
+          - **High Contrast & Accessible Badges**:
+            - Dynamic accessible contrast on all buttons and status badges.
+          - **All v1.9.1 Hardening Preserved**:
+            - 100% Main-Actor thread safety on OCR detections.
+            - Upright photo capture with \`UIImage.fixOrientation()\`.
+            - Fast 120Hz scrolling with in-memory \`NSCache\`.
+            - Battery-saving camera auto-pause in sub-screens and background." \
             || true

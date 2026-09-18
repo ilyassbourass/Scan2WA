@@ -21,16 +21,8 @@ public struct PackagesListView: View {
         packageManager.filteredPackages(query: searchQuery, statusFilter: selectedStatusFilter)
     }
 
-    private var livreCount: Int {
-        packageManager.packages.filter { $0.status == .livre }.count
-    }
-
-    private var reporteCount: Int {
-        packageManager.packages.filter { $0.status == .reporte }.count
-    }
-
-    private var annuleCount: Int {
-        packageManager.packages.filter { $0.status == .annule }.count
+    private func countFor(status: DeliveryStatus) -> Int {
+        packageManager.packages.filter { $0.status == status }.count
     }
 
     public var body: some View {
@@ -207,15 +199,15 @@ public struct PackagesListView: View {
                                     .font(.system(size: 11, weight: .black))
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
-                                    .background(isSelected ? Color.black : status.color)
-                                    .foregroundColor(isSelected ? status.color : .black)
+                                    .background(isSelected ? (status.textColorOnStatus == .white ? Color.black.opacity(0.4) : Color.black) : status.color)
+                                    .foregroundColor(isSelected ? (status.textColorOnStatus == .white ? .white : status.color) : status.textColorOnStatus)
                                     .clipShape(Capsule())
                             }
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 7)
                         .background(isSelected ? status.color : status.color.opacity(0.12))
-                        .foregroundColor(isSelected ? .black : status.color)
+                        .foregroundColor(isSelected ? status.textColorOnStatus : status.color)
                         .cornerRadius(16)
                         .overlay(
                             RoundedRectangle(cornerRadius: 16)
@@ -226,14 +218,6 @@ public struct PackagesListView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 6)
-        }
-    }
-
-    private func countFor(status: DeliveryStatus) -> Int {
-        switch status {
-        case .livre: return livreCount
-        case .reporte: return reporteCount
-        case .annule: return annuleCount
         }
     }
 
@@ -297,7 +281,7 @@ public struct PackagesListView: View {
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
                             .background(pkg.status.color)
-                            .foregroundColor(.black)
+                            .foregroundColor(pkg.status.textColorOnStatus)
                             .cornerRadius(6)
 
                         // Phone Number
@@ -558,21 +542,23 @@ fileprivate struct EditPackageSheet: View {
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundColor(.secondary)
 
-                            HStack(spacing: 8) {
+                            HStack(spacing: 6) {
                                 ForEach(DeliveryStatus.allCases) { status in
                                     Button(action: {
                                         selectedStatus = status
                                     }) {
-                                        HStack(spacing: 5) {
+                                        HStack(spacing: 4) {
                                             Image(systemName: status.iconName)
-                                                .font(.system(size: 12, weight: .bold))
+                                                .font(.system(size: 11, weight: .bold))
                                             Text(status.rawValue)
-                                                .font(.system(size: 13, weight: .bold))
+                                                .font(.system(size: 12, weight: .bold))
+                                                .lineLimit(1)
+                                                .minimumScaleFactor(0.8)
                                         }
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 10)
                                         .background(selectedStatus == status ? status.color : Color.white.opacity(0.08))
-                                        .foregroundColor(selectedStatus == status ? .black : .white)
+                                        .foregroundColor(selectedStatus == status ? status.textColorOnStatus : .white)
                                         .cornerRadius(10)
                                     }
                                 }

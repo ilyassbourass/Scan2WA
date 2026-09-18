@@ -70,7 +70,7 @@ public final class PackageManager: ObservableObject {
         image: UIImage,
         locationLink: String? = nil,
         notes: String? = nil,
-        status: DeliveryStatus = .livre
+        status: DeliveryStatus = .confirme
     ) -> PackageModel? {
         let packageId = UUID()
         let fileName = "pkg_\(packageId.uuidString).jpg"

@@ -11,7 +11,7 @@ public struct PackagePhotoCaptureView: View {
     @State private var capturedImage: UIImage? = nil
     @State private var notesText: String = ""
     @State private var locationLinkText: String = ""
-    @State private var selectedStatus: DeliveryStatus = .livre
+    @State private var selectedStatus: DeliveryStatus = .confirme
     @State private var isSaving: Bool = false
 
     @FocusState private var isInputFocused: Bool
@@ -210,29 +210,31 @@ public struct PackagePhotoCaptureView: View {
 
                     Divider().background(Color.white.opacity(0.2))
 
-                    // Status Selector (Livré, Reporté, Annulé)
+                    // Status Selector (Confirmé, Livré, Reporté, Annulé)
                     VStack(alignment: .leading, spacing: 8) {
                         Text("CHOISIR STATUT DU COLIS")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundColor(.secondary)
 
-                        HStack(spacing: 8) {
+                        HStack(spacing: 6) {
                             ForEach(DeliveryStatus.allCases) { status in
                                 Button(action: {
                                     selectedStatus = status
                                     let generator = UIImpactFeedbackGenerator(style: .light)
                                     generator.impactOccurred()
                                 }) {
-                                    HStack(spacing: 5) {
+                                    HStack(spacing: 4) {
                                         Image(systemName: status.iconName)
-                                            .font(.system(size: 12, weight: .bold))
+                                            .font(.system(size: 11, weight: .bold))
                                         Text(status.rawValue)
-                                            .font(.system(size: 13, weight: .bold))
+                                            .font(.system(size: 12, weight: .bold))
+                                            .lineLimit(1)
+                                            .minimumScaleFactor(0.8)
                                     }
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 10)
                                     .background(selectedStatus == status ? status.color : Color.white.opacity(0.08))
-                                    .foregroundColor(selectedStatus == status ? .black : .white)
+                                    .foregroundColor(selectedStatus == status ? status.textColorOnStatus : .white)
                                     .cornerRadius(10)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 10)
@@ -297,7 +299,7 @@ public struct PackagePhotoCaptureView: View {
                     Button(action: savePackageAction) {
                         HStack(spacing: 10) {
                             if isSaving {
-                                ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .black))
+                                ProgressView().progressViewStyle(CircularProgressViewStyle(tint: selectedStatus.textColorOnStatus == .white ? .white : .black))
                             } else {
                                 Image(systemName: selectedStatus.iconName)
                                     .font(.system(size: 18, weight: .bold))
@@ -308,7 +310,7 @@ public struct PackagePhotoCaptureView: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: 52)
                         .background(selectedStatus.color)
-                        .foregroundColor(.black)
+                        .foregroundColor(selectedStatus.textColorOnStatus)
                         .cornerRadius(14)
                     }
                     .disabled(isSaving)

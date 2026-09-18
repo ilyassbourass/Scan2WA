@@ -14,8 +14,8 @@ targets:
       path: Scan2WA/App/Info.plist
       properties:
         CFBundleDisplayName: "Scan2WA"
-        CFBundleShortVersionString: "1.9.1"
-        CFBundleVersion: "191"
+        CFBundleShortVersionString: "1.9.2"
+        CFBundleVersion: "192"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
