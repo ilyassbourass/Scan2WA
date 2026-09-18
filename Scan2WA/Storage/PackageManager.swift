@@ -60,14 +60,15 @@ public final class PackageManager: ObservableObject {
         }
     }
 
-    /// Saves a new package with its photo, phone number, location link, and delivery notes
+    /// Saves a new package with its photo, phone number, location link, delivery notes, and status
     @discardableResult
     public func savePackage(
         phoneNumber: String,
         cleanNumber: String,
         image: UIImage,
         locationLink: String? = nil,
-        notes: String? = nil
+        notes: String? = nil,
+        status: DeliveryStatus = .livre
     ) -> PackageModel? {
         let packageId = UUID()
         let fileName = "pkg_\(packageId.uuidString).jpg"
@@ -90,7 +91,7 @@ public final class PackageManager: ObservableObject {
             locationLink: locationLink?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? locationLink : nil,
             notes: notes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? notes : nil,
             createdAt: Date(),
-            isDelivered: false
+            status: status
         )
 
         DispatchQueue.main.async {
@@ -101,10 +102,18 @@ public final class PackageManager: ObservableObject {
         return newPackage
     }
 
-    /// Updates an existing package (e.g. notes, location link, or delivered status)
+    /// Updates an existing package (e.g. notes, location link, or status)
     public func updatePackage(_ package: PackageModel) {
         if let index = packages.firstIndex(where: { $0.id == package.id }) {
             packages[index] = package
+            persistPackages()
+        }
+    }
+
+    /// Quickly updates the delivery status of a package
+    public func updateStatus(id: UUID, status: DeliveryStatus) {
+        if let index = packages.firstIndex(where: { $0.id == id }) {
+            packages[index].status = status
             persistPackages()
         }
     }
@@ -127,17 +136,23 @@ public final class PackageManager: ObservableObject {
         return UIImage(contentsOfFile: photoURL.path)
     }
 
-    /// Returns packages filtered by search query (optimized for last 2 digits matching)
-    public func filteredPackages(query: String) -> [PackageModel] {
+    /// Returns packages filtered by search query and optional status tab
+    public func filteredPackages(query: String, statusFilter: DeliveryStatus? = nil) -> [PackageModel] {
+        var result = packages
+
+        if let status = statusFilter {
+            result = result.filter { $0.status == status }
+        }
+
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
-            return packages
+            return result
         }
 
         let cleanQuery = trimmed.filter { $0.isNumber }
 
         // Sort results: exact last-digits matches first, then contains, then notes
-        return packages.filter { $0.matches(query: trimmed) }.sorted { a, b in
+        return result.filter { $0.matches(query: trimmed) }.sorted { a, b in
             if !cleanQuery.isEmpty {
                 let aSuffix = a.cleanNumber.hasSuffix(cleanQuery)
                 let bSuffix = b.cleanNumber.hasSuffix(cleanQuery)

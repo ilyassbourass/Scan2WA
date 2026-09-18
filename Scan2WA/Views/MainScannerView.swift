@@ -13,6 +13,8 @@ public struct MainScannerView: View {
     @State private var packageNumberToCapture: String? = nil
     @State private var showPackageCapture: Bool = false
 
+    @Environment(\.scenePhase) private var scenePhase
+
     public init() {}
 
     public var body: some View {
@@ -322,6 +324,36 @@ public struct MainScannerView: View {
         }
         .onChange(of: autoFreeze) { newValue in
             cameraManager.autoFreeze = newValue
+        }
+        .onChange(of: showSettings) { isShowing in
+            if isShowing {
+                cameraManager.pauseSession()
+            } else if !showPackagesList && !showPackageCapture {
+                cameraManager.resumeSession()
+            }
+        }
+        .onChange(of: showPackagesList) { isShowing in
+            if isShowing {
+                cameraManager.pauseSession()
+            } else if !showSettings && !showPackageCapture {
+                cameraManager.resumeSession()
+            }
+        }
+        .onChange(of: showPackageCapture) { isShowing in
+            if isShowing {
+                cameraManager.pauseSession()
+            } else if !showSettings && !showPackagesList {
+                cameraManager.resumeSession()
+            }
+        }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active {
+                if !showSettings && !showPackagesList && !showPackageCapture {
+                    cameraManager.resumeSession()
+                }
+            } else {
+                cameraManager.pauseSession()
+            }
         }
         .sheet(isPresented: $showSettings) {
             SettingsSheetView(defaultCountryPrefix: $defaultCountryPrefix)

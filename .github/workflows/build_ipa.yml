@@ -53,18 +53,30 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create v1.8.0 build/Scan2WA.ipa \
-            --title "Scan2WA v1.8.0 (Package Photos, Last-2-Digits Search & Notes)" \
-            --notes "### Scan2WA v1.8.0
+          gh release create v1.9.0 build/Scan2WA.ipa \
+            --title "Scan2WA v1.9.0 (Livré / Reporté / Annulé Statuses, Preview Fix & Battery Optimization)" \
+            --notes "### Scan2WA v1.9.0
           
           Ready-to-sideload unsigned IPA for **LiveContainer** / AltStore / SideStore on iPhone 15 Pro Max.
           
-          **What's New in v1.8.0:**
-          - **Save Package & Take Photo**: Directly from the phone number action sheet, tap 'Save Package & Take Photo' to photograph the parcel box.
-          - **Photo Review & Retake**: Instant preview with 'Save Package' and 'Try Again (Retake)' buttons.
-          - **Delivery Notes & Location Links**: Add notes (apartment, COD amount) and map links (with 1-tap clipboard paste).
-          - **Fast Last-2-Digits Search**: Search bar instantly filters packages by the last two digits of the customer's phone number (e.g. typing '73' filters all packages ending in 73).
-          - **Packages Inventory Screen**: Dedicated 'Packages' view with photo thumbnails, full-screen zoom, prominent '#XX' badges, and 1-tap WA Business, Call, and Copy buttons.
-          - **100% Local & Offline**: All data and images persist securely in app storage.
-          - **Retains All Scanner Features**: Horizontal green highlights, 0.9s steady aiming filter, silent instant freeze, and direct WhatsApp Business deep links." \
+          **What's New in v1.9.0:**
+          - **Delivery Statuses (Livré, Reporté, Annulé)**:
+            - **🟢 Livré** (Delivered - Green)
+            - **🟠 Reporté** (Postponed/Rescheduled - Orange)
+            - **🔴 Annulé** (Cancelled/Refused - Red)
+            - Choose where to save directly in the review screen before saving.
+            - Filter packages by status tabs (Tous, Livré, Reporté, Annulé) with live package count badges.
+            - 1-tap quick status switcher right on each package card and in Edit mode.
+          - **Fixed Black Camera Preview on Package Capture**:
+            - Implemented the \`layerClass = AVCaptureVideoPreviewLayer.self\` layout pattern so the camera preview is bright and visible immediately.
+            - Pauses the main scanner session when opening package capture so camera hardware is never in conflict.
+          - **Battery & Performance Optimization**:
+            - Stops the main scanner camera and Vision OCR in the background when navigating to Packages, Package Capture, or Settings.
+            - Stops camera when app enters background, preventing battery drain and overheating.
+          - **Seamless Keyboard Dismissal**:
+            - Tap anywhere on empty space to instantly close the keyboard.
+            - Interactive scroll dismissal and keyboard 'Done' toolbar button on all text fields.
+          - **Retains All Features**:
+            - Last-2-digits quick search (e.g. typing '73' instantly finds package #73).
+            - Upright silent photo freeze, horizontal green highlights, and direct WhatsApp Business deep linking." \
             || true

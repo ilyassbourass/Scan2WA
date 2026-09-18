@@ -11,7 +11,10 @@ public struct PackagePhotoCaptureView: View {
     @State private var capturedImage: UIImage? = nil
     @State private var notesText: String = ""
     @State private var locationLinkText: String = ""
+    @State private var selectedStatus: DeliveryStatus = .livre
     @State private var isSaving: Bool = false
+
+    @FocusState private var isInputFocused: Bool
 
     public init(
         phoneNumber: String,
@@ -41,6 +44,10 @@ public struct PackagePhotoCaptureView: View {
                 // MARK: - Live Camera View
                 cameraView
             }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            isInputFocused = false
         }
         .onAppear {
             camera.setup()
@@ -170,7 +177,7 @@ public struct PackagePhotoCaptureView: View {
                         .font(.system(size: 16, weight: .black, design: .monospaced))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
-                        .background(Color(red: 0.15, green: 0.78, blue: 0.35))
+                        .background(selectedStatus.color)
                         .foregroundColor(.black)
                         .cornerRadius(8)
                 }
@@ -181,7 +188,7 @@ public struct PackagePhotoCaptureView: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
-                    .frame(maxHeight: 280)
+                    .frame(maxHeight: 260)
                     .cornerRadius(16)
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
@@ -190,7 +197,7 @@ public struct PackagePhotoCaptureView: View {
                     .padding(.horizontal, 20)
 
                 // Package Details Card
-                VStack(spacing: 14) {
+                VStack(spacing: 16) {
                     // Phone Number Header
                     HStack {
                         Image(systemName: "phone.fill")
@@ -203,6 +210,39 @@ public struct PackagePhotoCaptureView: View {
 
                     Divider().background(Color.white.opacity(0.2))
 
+                    // Status Selector (Livré, Reporté, Annulé)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("CHOISIR STATUT DU COLIS")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.secondary)
+
+                        HStack(spacing: 8) {
+                            ForEach(DeliveryStatus.allCases) { status in
+                                Button(action: {
+                                    selectedStatus = status
+                                    let generator = UIImpactFeedbackGenerator(style: .light)
+                                    generator.impactOccurred()
+                                }) {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: status.iconName)
+                                            .font(.system(size: 12, weight: .bold))
+                                        Text(status.rawValue)
+                                            .font(.system(size: 13, weight: .bold))
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                                    .background(selectedStatus == status ? status.color : Color.white.opacity(0.08))
+                                    .foregroundColor(selectedStatus == status ? .black : .white)
+                                    .cornerRadius(10)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(selectedStatus == status ? status.color : Color.clear, lineWidth: 1.5)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // Notes input
                     VStack(alignment: .leading, spacing: 6) {
                         Text("NOTES (OPTIONAL)")
@@ -210,6 +250,7 @@ public struct PackagePhotoCaptureView: View {
                             .foregroundColor(.secondary)
 
                         TextField("e.g., Apt 4, 250 DH COD, leave with concierge", text: $notesText)
+                            .focused($isInputFocused)
                             .padding(12)
                             .background(Color.white.opacity(0.08))
                             .cornerRadius(10)
@@ -235,6 +276,7 @@ public struct PackagePhotoCaptureView: View {
                         }
 
                         TextField("e.g. Google Maps or WhatsApp location link", text: $locationLinkText)
+                            .focused($isInputFocused)
                             .padding(12)
                             .background(Color.white.opacity(0.08))
                             .cornerRadius(10)
@@ -251,21 +293,21 @@ public struct PackagePhotoCaptureView: View {
 
                 // Action Buttons: Save or Try Again
                 VStack(spacing: 12) {
-                    // Save Button
+                    // Save Button with Selected Status Color
                     Button(action: savePackageAction) {
                         HStack(spacing: 10) {
                             if isSaving {
                                 ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .black))
                             } else {
-                                Image(systemName: "checkmark.circle.fill")
+                                Image(systemName: selectedStatus.iconName)
                                     .font(.system(size: 18, weight: .bold))
-                                Text("Save Package")
+                                Text("Save as \(selectedStatus.rawValue)")
                                     .font(.system(size: 17, weight: .bold))
                             }
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: 52)
-                        .background(Color(red: 0.15, green: 0.78, blue: 0.35))
+                        .background(selectedStatus.color)
                         .foregroundColor(.black)
                         .cornerRadius(14)
                     }
@@ -291,6 +333,17 @@ public struct PackagePhotoCaptureView: View {
                 .padding(.bottom, 36)
             }
         }
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    isInputFocused = false
+                }
+                .font(.system(size: 15, weight: .bold))
+                .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+            }
+        }
     }
 
     private func pasteLocationFromClipboard() {
@@ -310,7 +363,8 @@ public struct PackagePhotoCaptureView: View {
             cleanNumber: cleanNumber,
             image: image,
             locationLink: locationLinkText,
-            notes: notesText
+            notes: notesText,
+            status: selectedStatus
         )
 
         let generator = UINotificationFeedbackGenerator()
@@ -330,15 +384,16 @@ fileprivate final class PackageCameraManager: NSObject, ObservableObject, AVCapt
     private let photoOutput = AVCapturePhotoOutput()
     private var videoDevice: AVCaptureDevice?
     private var photoCompletion: ((UIImage) -> Void)?
+    private let cameraQueue = DispatchQueue(label: "com.scan2wa.packageCameraQueue")
     @Published var isTorchOn: Bool = false
 
     func setup() {
-        DispatchQueue.global(qos: .userInitiated).async {
+        cameraQueue.async {
             self.session.beginConfiguration()
             self.session.sessionPreset = .photo
 
             let discovery = AVCaptureDevice.DiscoverySession(
-                deviceTypes: [.builtInWideAngleCamera, .builtInTripleCamera],
+                deviceTypes: [.builtInTripleCamera, .builtInDualWideCamera, .builtInWideAngleCamera],
                 mediaType: .video,
                 position: .back
             )
@@ -365,7 +420,7 @@ fileprivate final class PackageCameraManager: NSObject, ObservableObject, AVCapt
     }
 
     func stop() {
-        DispatchQueue.global(qos: .userInitiated).async {
+        cameraQueue.async {
             if self.session.isRunning {
                 self.session.stopRunning()
             }
@@ -374,15 +429,21 @@ fileprivate final class PackageCameraManager: NSObject, ObservableObject, AVCapt
 
     func toggleTorch() {
         guard let device = videoDevice, device.hasTorch else { return }
-        try? device.lockForConfiguration()
-        if device.torchMode == .on {
-            device.torchMode = .off
-            DispatchQueue.main.async { self.isTorchOn = false }
-        } else {
-            try? device.setTorchModeOn(level: 1.0)
-            DispatchQueue.main.async { self.isTorchOn = true }
+        cameraQueue.async {
+            do {
+                try device.lockForConfiguration()
+                if device.torchMode == .on {
+                    device.torchMode = .off
+                    DispatchQueue.main.async { self.isTorchOn = false }
+                } else {
+                    try device.setTorchModeOn(level: 1.0)
+                    DispatchQueue.main.async { self.isTorchOn = true }
+                }
+                device.unlockForConfiguration()
+            } catch {
+                print("Torch error: \(error)")
+            }
         }
-        device.unlockForConfiguration()
     }
 
     func capturePhoto(completion: @escaping (UIImage) -> Void) {
@@ -404,27 +465,39 @@ fileprivate final class PackageCameraManager: NSObject, ObservableObject, AVCapt
     }
 }
 
-// MARK: - Package Camera Preview
+// MARK: - Package Camera Preview (Backing Layer UIView Pattern)
+fileprivate class PackageVideoPreviewUIView: UIView {
+    override class var layerClass: AnyClass {
+        AVCaptureVideoPreviewLayer.self
+    }
+
+    var previewLayer: AVCaptureVideoPreviewLayer {
+        layer as! AVCaptureVideoPreviewLayer
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        previewLayer.frame = bounds
+    }
+}
+
 fileprivate struct PackageCameraPreviewView: UIViewRepresentable {
     let session: AVCaptureSession
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
+    func makeUIView(context: Context) -> PackageVideoPreviewUIView {
+        let view = PackageVideoPreviewUIView()
         view.backgroundColor = .black
-        let preview = AVCaptureVideoPreviewLayer(session: session)
-        preview.videoGravity = .resizeAspectFill
+        view.previewLayer.session = session
+        view.previewLayer.videoGravity = .resizeAspectFill
         if #available(iOS 17.0, *) {
-            preview.connection?.videoRotationAngle = 90
+            view.previewLayer.connection?.videoRotationAngle = 90
         } else {
-            preview.connection?.videoOrientation = .portrait
+            view.previewLayer.connection?.videoOrientation = .portrait
         }
-        view.layer.addSublayer(preview)
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
-        if let preview = uiView.layer.sublayers?.first as? AVCaptureVideoPreviewLayer {
-            preview.frame = uiView.bounds
-        }
+    func updateUIView(_ uiView: PackageVideoPreviewUIView, context: Context) {
+        uiView.previewLayer.frame = uiView.bounds
     }
 }

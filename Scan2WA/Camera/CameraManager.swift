@@ -150,6 +150,26 @@ public final class CameraManager: NSObject, ObservableObject {
         }
     }
 
+    /// Stops the camera session completely to save battery and avoid hardware contention when navigating to sub-screens
+    public func pauseSession() {
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            if self.captureSession.isRunning {
+                self.captureSession.stopRunning()
+            }
+        }
+    }
+
+    /// Resumes the camera session when returning to the main scanner
+    public func resumeSession() {
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            if !self.captureSession.isRunning {
+                self.captureSession.startRunning()
+            }
+        }
+    }
+
     public func setZoomPreset(_ preset: ZoomPreset) {
         guard let device = videoDevice else { return }
         sessionQueue.async {

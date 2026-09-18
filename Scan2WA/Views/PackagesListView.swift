@@ -6,16 +6,31 @@ public struct PackagesListView: View {
     @Environment(\.presentationMode) private var presentationMode
 
     @State private var searchQuery: String = ""
+    @State private var selectedStatusFilter: DeliveryStatus? = nil // nil = "Tous"
     @State private var selectedPhotoForPreview: UIImage? = nil
     @State private var packageToEdit: PackageModel? = nil
     @State private var packageToDelete: PackageModel? = nil
     @State private var showDeleteConfirmation: Bool = false
     @State private var showCopiedBanner: Bool = false
 
+    @FocusState private var isSearchFocused: Bool
+
     public init() {}
 
     private var filteredPackages: [PackageModel] {
-        packageManager.filteredPackages(query: searchQuery)
+        packageManager.filteredPackages(query: searchQuery, statusFilter: selectedStatusFilter)
+    }
+
+    private var livreCount: Int {
+        packageManager.packages.filter { $0.status == .livre }.count
+    }
+
+    private var reporteCount: Int {
+        packageManager.packages.filter { $0.status == .reporte }.count
+    }
+
+    private var annuleCount: Int {
+        packageManager.packages.filter { $0.status == .annule }.count
     }
 
     public var body: some View {
@@ -26,6 +41,9 @@ public struct PackagesListView: View {
                 VStack(spacing: 0) {
                     // Search Bar
                     searchBarView
+
+                    // Status Filter Tabs (Tous, Livré, Reporté, Annulé)
+                    statusFilterTabs
 
                     // Content
                     if filteredPackages.isEmpty {
@@ -55,11 +73,15 @@ public struct PackagesListView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                isSearchFocused = false
+            }
             .navigationTitle("Saved Packages")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Text("\(packageManager.packages.count) \(packageManager.packages.count == 1 ? "package" : "packages")")
+                    Text("\(packageManager.packages.count) \(packageManager.packages.count == 1 ? "colis" : "colis")")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.secondary)
                 }
@@ -110,6 +132,7 @@ public struct PackagesListView: View {
                 .font(.system(size: 16, weight: .bold))
 
             TextField("Search by last 2 digits (e.g. 73) or phone number...", text: $searchQuery)
+                .focused($isSearchFocused)
                 .foregroundColor(.white)
                 .font(.system(size: 15))
                 .keyboardType(.numbersAndPunctuation)
@@ -127,7 +150,91 @@ public struct PackagesListView: View {
         .background(Color.white.opacity(0.08))
         .cornerRadius(12)
         .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+    }
+
+    // MARK: - Status Filter Tabs (Tous, Livré, Reporté, Annulé)
+    private var statusFilterTabs: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                // Tab: Tous
+                Button(action: {
+                    selectedStatusFilter = nil
+                    let generator = UIImpactFeedbackGenerator(style: .light)
+                    generator.impactOccurred()
+                }) {
+                    HStack(spacing: 6) {
+                        Text("Tous")
+                            .font(.system(size: 13, weight: .bold))
+                        Text("\(packageManager.packages.count)")
+                            .font(.system(size: 11, weight: .black))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(selectedStatusFilter == nil ? Color.white : Color.white.opacity(0.15))
+                            .foregroundColor(selectedStatusFilter == nil ? .black : .white)
+                            .clipShape(Capsule())
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(selectedStatusFilter == nil ? Color.white.opacity(0.2) : Color.white.opacity(0.06))
+                    .foregroundColor(.white)
+                    .cornerRadius(16)
+                }
+
+                // Tabs: Livré, Reporté, Annulé
+                ForEach(DeliveryStatus.allCases) { status in
+                    let isSelected = selectedStatusFilter == status
+                    let count = countFor(status: status)
+
+                    Button(action: {
+                        if selectedStatusFilter == status {
+                            selectedStatusFilter = nil
+                        } else {
+                            selectedStatusFilter = status
+                        }
+                        let generator = UIImpactFeedbackGenerator(style: .light)
+                        generator.impactOccurred()
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: status.iconName)
+                                .font(.system(size: 11, weight: .bold))
+                            Text(status.rawValue)
+                                .font(.system(size: 13, weight: .bold))
+
+                            if count > 0 {
+                                Text("\(count)")
+                                    .font(.system(size: 11, weight: .black))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(isSelected ? Color.black : status.color)
+                                    .foregroundColor(isSelected ? status.color : .black)
+                                    .clipShape(Capsule())
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(isSelected ? status.color : status.color.opacity(0.12))
+                        .foregroundColor(isSelected ? .black : status.color)
+                        .cornerRadius(16)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(status.color.opacity(isSelected ? 0 : 0.4), lineWidth: 1)
+                        )
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+        }
+    }
+
+    private func countFor(status: DeliveryStatus) -> Int {
+        switch status {
+        case .livre: return livreCount
+        case .reporte: return reporteCount
+        case .annule: return annuleCount
+        }
     }
 
     // MARK: - Package List
@@ -141,6 +248,7 @@ public struct PackagesListView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
         }
+        .scrollDismissesKeyboard(.interactively)
     }
 
     // MARK: - Package Card
@@ -188,7 +296,7 @@ public struct PackagesListView: View {
                             .font(.system(size: 15, weight: .black, design: .monospaced))
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
-                            .background(Color(red: 0.15, green: 0.78, blue: 0.35))
+                            .background(pkg.status.color)
                             .foregroundColor(.black)
                             .cornerRadius(6)
 
@@ -202,7 +310,7 @@ public struct PackagesListView: View {
                         // Menu button for edit/delete
                         Menu {
                             Button(action: { packageToEdit = pkg }) {
-                                Label("Edit Notes & Location", systemImage: "pencil")
+                                Label("Edit Notes, Status & Location", systemImage: "pencil")
                             }
 
                             Button(role: .destructive, action: {
@@ -217,6 +325,33 @@ public struct PackagesListView: View {
                                 .foregroundColor(.gray)
                                 .frame(width: 28, height: 28)
                         }
+                    }
+
+                    // Status pill with 1-tap quick status switcher
+                    Menu {
+                        ForEach(DeliveryStatus.allCases) { st in
+                            Button(action: {
+                                packageManager.updateStatus(id: pkg.id, status: st)
+                                let haptic = UIImpactFeedbackGenerator(style: .medium)
+                                haptic.impactOccurred()
+                            }) {
+                                Label(st.rawValue, systemImage: st.iconName)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: pkg.status.iconName)
+                                .font(.system(size: 11, weight: .bold))
+                            Text(pkg.status.rawValue)
+                                .font(.system(size: 12, weight: .bold))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 9, weight: .bold))
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(pkg.status.backgroundColor)
+                        .foregroundColor(pkg.status.color)
+                        .cornerRadius(8)
                     }
 
                     // Notes (if any)
@@ -319,7 +454,7 @@ public struct PackagesListView: View {
                 .font(.system(size: 56))
                 .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35).opacity(0.6))
 
-            if searchQuery.isEmpty {
+            if searchQuery.isEmpty && selectedStatusFilter == nil {
                 Text("No Packages Saved Yet")
                     .font(.system(size: 18, weight: .bold))
                     .foregroundColor(.white)
@@ -330,11 +465,11 @@ public struct PackagesListView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
             } else {
-                Text("No matching packages for \"\(searchQuery)\"")
+                Text("No matching packages")
                     .font(.system(size: 17, weight: .bold))
                     .foregroundColor(.white)
 
-                Text("Try searching with the last 2 digits of the customer's phone number.")
+                Text("Try adjusting your search query or status filter.")
                     .font(.system(size: 13))
                     .foregroundColor(.secondary)
             }
@@ -406,50 +541,91 @@ fileprivate struct EditPackageSheet: View {
     @Environment(\.presentationMode) private var presentationMode
     @State private var notesText: String = ""
     @State private var locationLinkText: String = ""
+    @State private var selectedStatus: DeliveryStatus = .livre
+
+    @FocusState private var isFieldFocused: Bool
 
     var body: some View {
         NavigationView {
             ZStack {
                 Color.black.ignoresSafeArea()
 
-                VStack(spacing: 16) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("NOTES")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.secondary)
-                        TextField("Delivery instructions...", text: $notesText)
-                            .padding(12)
-                            .background(Color.white.opacity(0.08))
-                            .cornerRadius(10)
-                            .foregroundColor(.white)
-                    }
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text("LOCATION LINK")
+                ScrollView {
+                    VStack(spacing: 16) {
+                        // Status Picker
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("STATUT")
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundColor(.secondary)
-                            Spacer()
-                            Button("Paste") {
-                                if let paste = UIPasteboard.general.string {
-                                    locationLinkText = paste
+
+                            HStack(spacing: 8) {
+                                ForEach(DeliveryStatus.allCases) { status in
+                                    Button(action: {
+                                        selectedStatus = status
+                                    }) {
+                                        HStack(spacing: 5) {
+                                            Image(systemName: status.iconName)
+                                                .font(.system(size: 12, weight: .bold))
+                                            Text(status.rawValue)
+                                                .font(.system(size: 13, weight: .bold))
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 10)
+                                        .background(selectedStatus == status ? status.color : Color.white.opacity(0.08))
+                                        .foregroundColor(selectedStatus == status ? .black : .white)
+                                        .cornerRadius(10)
+                                    }
                                 }
                             }
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
                         }
 
-                        TextField("Google Maps or Apple Maps URL...", text: $locationLinkText)
-                            .padding(12)
-                            .background(Color.white.opacity(0.08))
-                            .cornerRadius(10)
-                            .foregroundColor(.white)
-                            .keyboardType(.URL)
-                    }
+                        // Notes Field
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("NOTES")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.secondary)
+                            TextField("Delivery instructions...", text: $notesText)
+                                .focused($isFieldFocused)
+                                .padding(12)
+                                .background(Color.white.opacity(0.08))
+                                .cornerRadius(10)
+                                .foregroundColor(.white)
+                        }
 
-                    Spacer()
+                        // Location Link Field
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text("LOCATION LINK")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Button("Paste") {
+                                    if let paste = UIPasteboard.general.string {
+                                        locationLinkText = paste
+                                    }
+                                }
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                            }
+
+                            TextField("Google Maps or Apple Maps URL...", text: $locationLinkText)
+                                .focused($isFieldFocused)
+                                .padding(12)
+                                .background(Color.white.opacity(0.08))
+                                .cornerRadius(10)
+                                .foregroundColor(.white)
+                                .keyboardType(.URL)
+                        }
+
+                        Spacer()
+                    }
+                    .padding(20)
                 }
-                .padding(20)
+                .scrollDismissesKeyboard(.interactively)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                isFieldFocused = false
             }
             .navigationTitle("Edit Package Details")
             .navigationBarTitleDisplayMode(.inline)
@@ -465,16 +641,27 @@ fileprivate struct EditPackageSheet: View {
                     Button("Save") {
                         package.notes = notesText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : notesText
                         package.locationLink = locationLinkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : locationLinkText
+                        package.status = selectedStatus
                         PackageManager.shared.updatePackage(package)
                         presentationMode.wrappedValue.dismiss()
                     }
                     .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
                     .font(.headline)
                 }
+
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        isFieldFocused = false
+                    }
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                }
             }
             .onAppear {
                 self.notesText = package.notes ?? ""
                 self.locationLinkText = package.locationLink ?? ""
+                self.selectedStatus = package.status
             }
         }
     }
