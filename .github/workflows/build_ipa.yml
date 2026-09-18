@@ -53,15 +53,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create v1.7.0 build/Scan2WA.ipa \
-            --title "Scan2WA v1.7.0 (Fixed Exact Green Highlights On Numbers)" \
-            --notes "### Scan2WA v1.7.0
+          gh release create v1.8.0 build/Scan2WA.ipa \
+            --title "Scan2WA v1.8.0 (Package Photos, Last-2-Digits Search & Notes)" \
+            --notes "### Scan2WA v1.8.0
           
           Ready-to-sideload unsigned IPA for **LiveContainer** / AltStore / SideStore on iPhone 15 Pro Max.
           
-          **What's Fixed in v1.7.0:**
-          - **Fixed Green Highlight & Underline Placement**: Replaced legacy metadata conversion that swapped coordinates into vertical strips with direct Cartesian coordinate transformation (\`convertVisionRectToScreen\`). The green highlight box and underline now align horizontally and exactly over the phone number digits.
-          - **Sub-string Bounding Box Accuracy**: Uses Vision's \`VNRecognizedText.boundingBox(for:)\` to isolate the exact character range of the phone number, ignoring extraneous surrounding text.
-          - **Seamless Camera Viewport**: Keeps preview layer mounted underneath frozen photo so unfreezing with 'Scan Again' is instantaneous with zero screen flicker.
-          - **Retains All v1.6.0 Fixes**: 100% upright photo orientation, 0.9s steady aiming filter (no premature freeze), silent zero-sound capture, and direct WhatsApp Business deep linking." \
+          **What's New in v1.8.0:**
+          - **Save Package & Take Photo**: Directly from the phone number action sheet, tap 'Save Package & Take Photo' to photograph the parcel box.
+          - **Photo Review & Retake**: Instant preview with 'Save Package' and 'Try Again (Retake)' buttons.
+          - **Delivery Notes & Location Links**: Add notes (apartment, COD amount) and map links (with 1-tap clipboard paste).
+          - **Fast Last-2-Digits Search**: Search bar instantly filters packages by the last two digits of the customer's phone number (e.g. typing '73' filters all packages ending in 73).
+          - **Packages Inventory Screen**: Dedicated 'Packages' view with photo thumbnails, full-screen zoom, prominent '#XX' badges, and 1-tap WA Business, Call, and Copy buttons.
+          - **100% Local & Offline**: All data and images persist securely in app storage.
+          - **Retains All Scanner Features**: Horizontal green highlights, 0.9s steady aiming filter, silent instant freeze, and direct WhatsApp Business deep links." \
             || true

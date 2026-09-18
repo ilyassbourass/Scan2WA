@@ -3,11 +3,15 @@ import AVFoundation
 
 public struct MainScannerView: View {
     @StateObject private var cameraManager = CameraManager()
+    @ObservedObject private var packageManager = PackageManager.shared
     @AppStorage("defaultCountryPrefix") private var defaultCountryPrefix: String = "+212"
     @AppStorage("autoFreezeOnDetection") private var autoFreeze: Bool = true
 
     @State private var selectedNumber: RecognizedNumber?
     @State private var showSettings: Bool = false
+    @State private var showPackagesList: Bool = false
+    @State private var packageNumberToCapture: String? = nil
+    @State private var showPackageCapture: Bool = false
 
     public init() {}
 
@@ -79,6 +83,37 @@ public struct MainScannerView: View {
                             }
                         } else {
                             Color.clear.frame(width: 44, height: 44)
+                        }
+
+                        Spacer()
+
+                        // Packages Inventory Button
+                        Button(action: {
+                            showPackagesList = true
+                        }) {
+                            HStack(spacing: 5) {
+                                Image(systemName: "shippingbox.fill")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+
+                                Text("Packages")
+                                    .font(.system(size: 13, weight: .bold))
+
+                                if packageManager.packages.count > 0 {
+                                    Text("\(packageManager.packages.count)")
+                                        .font(.system(size: 11, weight: .black))
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Color(red: 0.15, green: 0.78, blue: 0.35))
+                                        .foregroundColor(.black)
+                                        .clipShape(Capsule())
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.black.opacity(0.65))
+                            .foregroundColor(.white)
+                            .cornerRadius(20)
                         }
 
                         Spacer()
@@ -270,6 +305,11 @@ public struct MainScannerView: View {
                         defaultCountryPrefix: $defaultCountryPrefix,
                         onDismiss: {
                             selectedNumber = nil
+                        },
+                        onSavePackage: { cleanNum in
+                            selectedNumber = nil
+                            packageNumberToCapture = cleanNum
+                            showPackageCapture = true
                         }
                     )
                 }
@@ -285,6 +325,21 @@ public struct MainScannerView: View {
         }
         .sheet(isPresented: $showSettings) {
             SettingsSheetView(defaultCountryPrefix: $defaultCountryPrefix)
+        }
+        .sheet(isPresented: $showPackagesList) {
+            PackagesListView()
+        }
+        .fullScreenCover(isPresented: $showPackageCapture) {
+            if let num = packageNumberToCapture {
+                PackagePhotoCaptureView(
+                    phoneNumber: num,
+                    cleanNumber: num,
+                    onDismiss: {
+                        showPackageCapture = false
+                        packageNumberToCapture = nil
+                    }
+                )
+            }
         }
     }
 }

@@ -5,6 +5,7 @@ public struct ActionSheetView: View {
     public let number: RecognizedNumber
     @Binding public var defaultCountryPrefix: String
     public let onDismiss: () -> Void
+    public var onSavePackage: ((String) -> Void)? = nil
 
     @State private var editableNumber: String
     @State private var showCopiedAlert = false
@@ -12,11 +13,13 @@ public struct ActionSheetView: View {
     public init(
         number: RecognizedNumber,
         defaultCountryPrefix: Binding<String>,
-        onDismiss: @escaping () -> Void
+        onDismiss: @escaping () -> Void,
+        onSavePackage: ((String) -> Void)? = nil
     ) {
         self.number = number
         self._defaultCountryPrefix = defaultCountryPrefix
         self.onDismiss = onDismiss
+        self.onSavePackage = onSavePackage
         self._editableNumber = State(initialValue: number.cleanNumber)
     }
 
@@ -57,6 +60,26 @@ public struct ActionSheetView: View {
                     .foregroundColor(.white)
                     .cornerRadius(14)
                     .shadow(color: Color(red: 0.15, green: 0.78, blue: 0.35).opacity(0.4), radius: 6, x: 0, y: 3)
+                }
+
+                // 2. Save Package & Take Photo
+                Button(action: {
+                    let num = editableNumber
+                    onDismiss()
+                    onSavePackage?(num)
+                }) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "shippingbox.fill")
+                            .font(.system(size: 17, weight: .bold))
+                        Text("Save Package & Take Photo")
+                            .font(.system(size: 16, weight: .bold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+                    .background(Color.orange.opacity(0.95))
+                    .foregroundColor(.black)
+                    .cornerRadius(12)
+                    .shadow(color: Color.orange.opacity(0.35), radius: 6, x: 0, y: 2)
                 }
 
                 // 2. Personal WhatsApp Button (Optional alternative)
