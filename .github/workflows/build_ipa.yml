@@ -78,4 +78,4 @@ jobs:
             - In-app Shortcut Guide sheet with 1-tap 'Copier l'URL' button.
           - **All 4 Delivery Statuses Preserved**:
             - **🔵 Confirmé**, **🟢 Livré**, **🟠 Reporté**, and **🔴 Annulé**." \
-            || true
+            || gh release upload v1.10.0 build/Scan2WA.ipa --clobber || true
