@@ -16,7 +16,19 @@ def sanitize_plist(plist_path):
         "CFBundleShortVersionString": "1.10.0",
         "CFBundleVersion": "1100",
         "LSRequiresIPhoneOS": True,
-        "MinimumOSVersion": "17.0"
+        "MinimumOSVersion": "17.0",
+        "CFBundleIcons": {
+            "CFBundlePrimaryIcon": {
+                "CFBundleIconFiles": ["AppIcon60x60"],
+                "CFBundleIconName": "AppIcon"
+            }
+        },
+        "CFBundleIcons~ipad": {
+            "CFBundlePrimaryIcon": {
+                "CFBundleIconFiles": ["AppIcon60x60", "AppIcon76x76"],
+                "CFBundleIconName": "AppIcon"
+            }
+        }
     }
 
     for key, val in defaults.items():

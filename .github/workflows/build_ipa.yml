@@ -39,6 +39,9 @@ jobs:
           mkdir -p build/Payload
           cp -r build/Scan2WA.xcarchive/Products/Applications/Scan2WA.app build/Payload/
           cp Scan2WA/App/Info.plist build/Payload/Scan2WA.app/Info.plist
+          cp Scan2WA/Assets.xcassets/AppIcon.appiconset/AppIcon-60@2x.png build/Payload/Scan2WA.app/AppIcon60x60@2x.png || true
+          cp Scan2WA/Assets.xcassets/AppIcon.appiconset/AppIcon-60@3x.png build/Payload/Scan2WA.app/AppIcon60x60@3x.png || true
+          cp Scan2WA/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png build/Payload/Scan2WA.app/iTunesArtwork || true
           python3 scripts/sanitize_plist.py build/Payload/Scan2WA.app/Info.plist
           cd build
           zip -r Scan2WA.ipa Payload
