@@ -128,6 +128,17 @@ public final class PackageManager: ObservableObject {
         }
     }
 
+    /// Batch updates the delivery status of multiple packages
+    public func batchUpdateStatus(ids: Set<UUID>, status: DeliveryStatus) {
+        guard !ids.isEmpty else { return }
+        for index in packages.indices {
+            if ids.contains(packages[index].id) {
+                packages[index].status = status
+            }
+        }
+        persistPackages()
+    }
+
     /// Deletes a package and cleans up its photo from storage
     public func deletePackage(id: UUID) {
         if let index = packages.firstIndex(where: { $0.id == id }) {
@@ -138,6 +149,18 @@ public final class PackageManager: ObservableObject {
             packages.remove(at: index)
             persistPackages()
         }
+    }
+
+    /// Batch deletes multiple packages and cleans up their photos from storage
+    public func batchDeletePackages(ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        for pkg in packages where ids.contains(pkg.id) {
+            photoCache.removeObject(forKey: pkg.photoFileName as NSString)
+            let photoURL = photosDirectoryURL.appendingPathComponent(pkg.photoFileName)
+            try? fileManager.removeItem(at: photoURL)
+        }
+        packages.removeAll(where: { ids.contains($0.id) })
+        persistPackages()
     }
 
     /// Loads the photo for a package from cache or disk

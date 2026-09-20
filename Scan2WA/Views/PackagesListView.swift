@@ -16,6 +16,9 @@ public struct PackagesListView: View {
     @State private var copiedBannerText: String = "Phone number copied to clipboard!"
     @State private var showAddPackageSheet: Bool = false
     @State private var showShortcutSheet: Bool = false
+    @State private var isSelectionMode: Bool = false
+    @State private var selectedPackageIDs: Set<UUID> = []
+    @State private var showBatchDeleteAlert: Bool = false
 
     @FocusState private var isSearchFocused: Bool
 
@@ -41,6 +44,40 @@ public struct PackagesListView: View {
                     // Status Filter Tabs (All, Livré, Reporté, Annulé)
                     statusFilterTabs
 
+                    // Selection Mode Subheader Bar
+                    if isSelectionMode {
+                        HStack {
+                            Text("\(selectedPackageIDs.count) of \(filteredPackages.count) selected")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(.white)
+
+                            Spacer()
+
+                            Button(action: {
+                                withAnimation {
+                                    if selectedPackageIDs.count == filteredPackages.count {
+                                        selectedPackageIDs.removeAll()
+                                    } else {
+                                        selectedPackageIDs = Set(filteredPackages.map { $0.id })
+                                    }
+                                }
+                                let haptic = UIImpactFeedbackGenerator(style: .light)
+                                haptic.impactOccurred()
+                            }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: selectedPackageIDs.count == filteredPackages.count ? "checkmark.circle.fill" : "checkmark.circle")
+                                    Text(selectedPackageIDs.count == filteredPackages.count ? "Deselect All" : "Select All")
+                                }
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.white.opacity(0.08))
+                        .transition(.opacity)
+                    }
+
                     // Content
                     if filteredPackages.isEmpty {
                         emptyStateView
@@ -65,6 +102,78 @@ public struct PackagesListView: View {
                         .background(Color(.darkGray).opacity(0.95))
                         .cornerRadius(20)
                         .padding(.bottom, 24)
+                // Bottom Batch Action Bar
+                if isSelectionMode {
+                    VStack {
+                        Spacer()
+                        VStack(spacing: 8) {
+                            HStack(spacing: 12) {
+                                // 1. Mark All / Selected as... Menu
+                                Menu {
+                                    ForEach(DeliveryStatus.allCases) { status in
+                                        Button(action: {
+                                            let count = selectedPackageIDs.count
+                                            packageManager.batchUpdateStatus(ids: selectedPackageIDs, status: status)
+                                            let haptic = UINotificationFeedbackGenerator()
+                                            haptic.notificationOccurred(.success)
+                                            copiedBannerText = "Marked \(count) package\(count == 1 ? "" : "s") as \(status.rawValue)!"
+                                            withAnimation { showCopiedBanner = true }
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+                                                withAnimation { showCopiedBanner = false }
+                                            }
+                                            selectedPackageIDs.removeAll()
+                                            isSelectionMode = false
+                                        }) {
+                                            Label("Mark as \(status.rawValue)", systemImage: status.iconName)
+                                        }
+                                    }
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "checkmark.seal.fill")
+                                            .font(.system(size: 15, weight: .bold))
+                                        Text(selectedPackageIDs.isEmpty ? "Mark Status" : "Mark as (\(selectedPackageIDs.count))")
+                                            .font(.system(size: 14, weight: .bold))
+                                        Image(systemName: "chevron.up")
+                                            .font(.system(size: 11, weight: .bold))
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 48)
+                                    .background(selectedPackageIDs.isEmpty ? Color.white.opacity(0.12) : Color(red: 0.15, green: 0.78, blue: 0.35))
+                                    .foregroundColor(selectedPackageIDs.isEmpty ? .gray : .black)
+                                    .cornerRadius(14)
+                                }
+                                .disabled(selectedPackageIDs.isEmpty)
+
+                                // 2. Delete Selected Packages Button
+                                Button(action: {
+                                    showBatchDeleteAlert = true
+                                }) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "trash.fill")
+                                            .font(.system(size: 15, weight: .bold))
+                                        Text(selectedPackageIDs.isEmpty ? "Delete" : "Delete (\(selectedPackageIDs.count))")
+                                            .font(.system(size: 14, weight: .bold))
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 48)
+                                    .background(selectedPackageIDs.isEmpty ? Color.white.opacity(0.12) : Color.red.opacity(0.9))
+                                    .foregroundColor(selectedPackageIDs.isEmpty ? .gray : .white)
+                                    .cornerRadius(14)
+                                }
+                                .disabled(selectedPackageIDs.isEmpty)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Color(.darkGray).opacity(0.96))
+                            .cornerRadius(20)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                            )
+                            .shadow(color: .black.opacity(0.6), radius: 10, x: 0, y: -2)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 12)
                     }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
@@ -77,34 +186,75 @@ public struct PackagesListView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Text("\(packageManager.packages.count) \(packageManager.packages.count == 1 ? "package" : "packages")")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.secondary)
+                    if isSelectionMode {
+                        Button("Done") {
+                            withAnimation {
+                                isSelectionMode = false
+                                selectedPackageIDs.removeAll()
+                            }
+                        }
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                    } else {
+                        Text("\(packageManager.packages.count) \(packageManager.packages.count == 1 ? "package" : "packages")")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.secondary)
+                    }
                 }
 
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        showShortcutSheet = true
-                    }) {
-                        Image(systemName: "bolt.circle")
-                            .font(.system(size: 19))
-                            .foregroundColor(.orange)
-                    }
+                    if isSelectionMode {
+                        Button(action: {
+                            withAnimation {
+                                if selectedPackageIDs.count == filteredPackages.count {
+                                    selectedPackageIDs.removeAll()
+                                } else {
+                                    selectedPackageIDs = Set(filteredPackages.map { $0.id })
+                                }
+                            }
+                            let haptic = UIImpactFeedbackGenerator(style: .light)
+                            haptic.impactOccurred()
+                        }) {
+                            Text(selectedPackageIDs.count == filteredPackages.count ? "Deselect All" : "Select All")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                        }
+                    } else {
+                        if !filteredPackages.isEmpty {
+                            Button(action: {
+                                withAnimation {
+                                    isSelectionMode = true
+                                }
+                            }) {
+                                Text("Select")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                            }
+                        }
 
-                    Button(action: {
-                        showAddPackageSheet = true
-                    }) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 21, weight: .semibold))
-                            .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
-                    }
+                        Button(action: {
+                            showShortcutSheet = true
+                        }) {
+                            Image(systemName: "bolt.circle")
+                                .font(.system(size: 19))
+                                .foregroundColor(.orange)
+                        }
 
-                    Button(action: {
-                        presentationMode.wrappedValue.dismiss()
-                    }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.gray)
+                        Button(action: {
+                            showAddPackageSheet = true
+                        }) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 21, weight: .semibold))
+                                .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                        }
+
+                        Button(action: {
+                            presentationMode.wrappedValue.dismiss()
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(.gray)
+                        }
                     }
                 }
 
@@ -162,6 +312,26 @@ public struct PackagesListView: View {
                     primaryButton: .destructive(Text("Delete")) {
                         if let id = packageToDelete?.id {
                             packageManager.deletePackage(id: id)
+                        }
+                    },
+                    secondaryButton: .cancel()
+                )
+            }
+            .alert(isPresented: $showBatchDeleteAlert) {
+                Alert(
+                    title: Text("Delete \(selectedPackageIDs.count) Packages?"),
+                    message: Text("Are you sure you want to permanently delete the \(selectedPackageIDs.count) selected package\(selectedPackageIDs.count == 1 ? "" : "s") and their photos? This action cannot be undone."),
+                    primaryButton: .destructive(Text("Delete All")) {
+                        let count = selectedPackageIDs.count
+                        packageManager.batchDeletePackages(ids: selectedPackageIDs)
+                        selectedPackageIDs.removeAll()
+                        isSelectionMode = false
+                        let haptic = UINotificationFeedbackGenerator()
+                        haptic.notificationOccurred(.success)
+                        copiedBannerText = "Deleted \(count) package\(count == 1 ? "" : "s")!"
+                        withAnimation { showCopiedBanner = true }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+                            withAnimation { showCopiedBanner = false }
                         }
                     },
                     secondaryButton: .cancel()
@@ -293,203 +463,260 @@ public struct PackagesListView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
+            .padding(.bottom, isSelectionMode ? 90 : 10)
         }
         .scrollDismissesKeyboard(.interactively)
     }
 
     // MARK: - Package Card
     private func packageCard(for pkg: PackageModel) -> some View {
-        VStack(spacing: 12) {
-            HStack(alignment: .top, spacing: 14) {
-                // Package photo thumbnail with tap to expand
-                if let photo = packageManager.loadPhoto(fileName: pkg.photoFileName) {
-                    Button(action: {
-                        selectedPhotoForPreview = photo
-                    }) {
-                        ZStack(alignment: .bottomTrailing) {
-                            Image(uiImage: photo)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 80, height: 80)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
+        let isSelected = selectedPackageIDs.contains(pkg.id)
 
-                            Image(systemName: "arrow.up.left.and.arrow.down.right")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(.white)
-                                .padding(4)
-                                .background(Color.black.opacity(0.65))
-                                .clipShape(Circle())
-                                .padding(4)
-                        }
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                } else {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.white.opacity(0.08))
-                        .frame(width: 80, height: 80)
-                        .overlay(
-                            Image(systemName: "shippingbox.fill")
-                                .font(.system(size: 28))
-                                .foregroundColor(.gray)
-                        )
+        return HStack(spacing: 12) {
+            // Selection Checkbox
+            if isSelectionMode {
+                Button(action: {
+                    toggleSelection(for: pkg.id)
+                }) {
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(isSelected ? Color(red: 0.15, green: 0.78, blue: 0.35) : .gray)
                 }
+                .buttonStyle(PlainButtonStyle())
+            }
 
-                // Details
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 8) {
-                        // Big Last 2 Digits Badge
-                        Text("#\(pkg.lastTwoDigits)")
-                            .font(.system(size: 15, weight: .black, design: .monospaced))
+            VStack(spacing: 12) {
+                HStack(alignment: .top, spacing: 14) {
+                    // Package photo thumbnail with tap to expand
+                    if let photo = packageManager.loadPhoto(fileName: pkg.photoFileName) {
+                        Button(action: {
+                            if isSelectionMode {
+                                toggleSelection(for: pkg.id)
+                            } else {
+                                selectedPhotoForPreview = photo
+                            }
+                        }) {
+                            ZStack(alignment: .bottomTrailing) {
+                                Image(uiImage: photo)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 80, height: 80)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                                if !isSelectionMode {
+                                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .padding(4)
+                                        .background(Color.black.opacity(0.65))
+                                        .clipShape(Circle())
+                                        .padding(4)
+                                }
+                            }
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    } else {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.white.opacity(0.08))
+                            .frame(width: 80, height: 80)
+                            .overlay(
+                                Image(systemName: "shippingbox.fill")
+                                    .font(.system(size: 28))
+                                    .foregroundColor(.gray)
+                            )
+                    }
+
+                    // Details
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            // Big Last 2 Digits Badge
+                            Text("#\(pkg.lastTwoDigits)")
+                                .font(.system(size: 15, weight: .black, design: .monospaced))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(pkg.status.color)
+                                .foregroundColor(pkg.status.textColorOnStatus)
+                                .cornerRadius(6)
+
+                            // Phone Number
+                            Text(pkg.cleanNumber)
+                                .font(.system(size: 16, weight: .bold, design: .monospaced))
+                                .foregroundColor(.white)
+
+                            Spacer()
+
+                            if !isSelectionMode {
+                                // Menu button for edit/delete
+                                Menu {
+                                    Button(action: { packageToEdit = pkg }) {
+                                        Label("Edit Notes, Status & Location", systemImage: "pencil")
+                                    }
+
+                                    Button(role: .destructive, action: {
+                                        packageToDelete = pkg
+                                        showDeleteConfirmation = true
+                                    }) {
+                                        Label("Delete Package", systemImage: "trash")
+                                    }
+                                } label: {
+                                    Image(systemName: "ellipsis")
+                                        .font(.system(size: 16, weight: .bold))
+                                        .foregroundColor(.gray)
+                                        .frame(width: 28, height: 28)
+                                }
+                            }
+                        }
+
+                        // Status pill with 1-tap quick status switcher
+                        if !isSelectionMode {
+                            Menu {
+                                ForEach(DeliveryStatus.allCases) { st in
+                                    Button(action: {
+                                        packageManager.updateStatus(id: pkg.id, status: st)
+                                        let haptic = UIImpactFeedbackGenerator(style: .medium)
+                                        haptic.impactOccurred()
+                                    }) {
+                                        Label(st.rawValue, systemImage: st.iconName)
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: pkg.status.iconName)
+                                        .font(.system(size: 11, weight: .bold))
+                                    Text(pkg.status.rawValue)
+                                        .font(.system(size: 12, weight: .bold))
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 9, weight: .bold))
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(pkg.status.backgroundColor)
+                                .foregroundColor(pkg.status.color)
+                                .cornerRadius(8)
+                            }
+                        } else {
+                            HStack(spacing: 4) {
+                                Image(systemName: pkg.status.iconName)
+                                    .font(.system(size: 11, weight: .bold))
+                                Text(pkg.status.rawValue)
+                                    .font(.system(size: 12, weight: .bold))
+                            }
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
-                            .background(pkg.status.color)
-                            .foregroundColor(pkg.status.textColorOnStatus)
-                            .cornerRadius(6)
-
-                        // Phone Number
-                        Text(pkg.cleanNumber)
-                            .font(.system(size: 16, weight: .bold, design: .monospaced))
-                            .foregroundColor(.white)
-
-                        Spacer()
-
-                        // Menu button for edit/delete
-                        Menu {
-                            Button(action: { packageToEdit = pkg }) {
-                                Label("Edit Notes, Status & Location", systemImage: "pencil")
-                            }
-
-                            Button(role: .destructive, action: {
-                                packageToDelete = pkg
-                                showDeleteConfirmation = true
-                            }) {
-                                Label("Delete Package", systemImage: "trash")
-                            }
-                        } label: {
-                            Image(systemName: "ellipsis")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.gray)
-                                .frame(width: 28, height: 28)
+                            .background(pkg.status.backgroundColor)
+                            .foregroundColor(pkg.status.color)
+                            .cornerRadius(8)
                         }
-                    }
 
-                    // Status pill with 1-tap quick status switcher
-                    Menu {
-                        ForEach(DeliveryStatus.allCases) { st in
+                        // Notes (if any)
+                        if let notes = pkg.notes, !notes.isEmpty {
+                            Text(notes)
+                                .font(.system(size: 13))
+                                .foregroundColor(.white.opacity(0.85))
+                                .lineLimit(2)
+                        }
+
+                        // Location link button (if any)
+                        if let link = pkg.locationLink, !link.isEmpty {
                             Button(action: {
-                                packageManager.updateStatus(id: pkg.id, status: st)
-                                let haptic = UIImpactFeedbackGenerator(style: .medium)
-                                haptic.impactOccurred()
+                                openLocationLink(link)
                             }) {
-                                Label(st.rawValue, systemImage: st.iconName)
+                                HStack(spacing: 4) {
+                                    Image(systemName: "map.fill")
+                                        .font(.system(size: 11))
+                                    Text("Open Location Map")
+                                        .font(.system(size: 12, weight: .semibold))
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.system(size: 10))
+                                }
+                                .foregroundColor(.blue)
                             }
                         }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: pkg.status.iconName)
-                                .font(.system(size: 11, weight: .bold))
-                            Text(pkg.status.rawValue)
-                                .font(.system(size: 12, weight: .bold))
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 9, weight: .bold))
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(pkg.status.backgroundColor)
-                        .foregroundColor(pkg.status.color)
-                        .cornerRadius(8)
-                    }
 
-                    // Notes (if any)
-                    if let notes = pkg.notes, !notes.isEmpty {
-                        Text(notes)
-                            .font(.system(size: 13))
-                            .foregroundColor(.white.opacity(0.85))
-                            .lineLimit(2)
+                        // Time saved (only time, no big date)
+                        Text(pkg.createdAt, style: .time)
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
                     }
+                }
 
-                    // Location link button (if any)
-                    if let link = pkg.locationLink, !link.isEmpty {
+                if !isSelectionMode {
+                    Divider().background(Color.white.opacity(0.12))
+
+                    // Action Shortcuts Bar
+                    HStack(spacing: 8) {
+                        // 1. WhatsApp Business Button
                         Button(action: {
-                            openLocationLink(link)
+                            openWABusiness(for: pkg.cleanNumber)
                         }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "map.fill")
-                                    .font(.system(size: 11))
-                                Text("Open Location Map")
-                                    .font(.system(size: 12, weight: .semibold))
-                                Image(systemName: "arrow.up.right")
-                                    .font(.system(size: 10))
+                            HStack(spacing: 6) {
+                                Image(systemName: "briefcase.fill")
+                                    .font(.system(size: 13, weight: .bold))
+                                Text("WA Business")
+                                    .font(.system(size: 13, weight: .bold))
                             }
-                            .foregroundColor(.blue)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 36)
+                            .background(Color(red: 0.15, green: 0.78, blue: 0.35))
+                            .foregroundColor(.black)
+                            .cornerRadius(8)
+                        }
+
+                        // 2. Call Button
+                        Button(action: {
+                            callNumber(pkg.cleanNumber)
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "phone.fill")
+                                    .font(.system(size: 12, weight: .bold))
+                                Text("Call")
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 36)
+                            .background(Color.white.opacity(0.12))
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                        }
+
+                        // 3. Copy Button
+                        Button(action: {
+                            copyNumber(pkg.cleanNumber)
+                        }) {
+                            Image(systemName: "doc.on.doc")
+                                .font(.system(size: 13))
+                                .foregroundColor(.white)
+                                .frame(width: 36, height: 36)
+                                .background(Color.white.opacity(0.12))
+                                .cornerRadius(8)
                         }
                     }
-
-                    // Date saved
-                    Text(pkg.createdAt, style: .date) + Text(" at ") + Text(pkg.createdAt, style: .time)
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
                 }
             }
-
-            Divider().background(Color.white.opacity(0.12))
-
-            // Action Shortcuts Bar
-            HStack(spacing: 8) {
-                // 1. WhatsApp Business Button
-                Button(action: {
-                    openWABusiness(for: pkg.cleanNumber)
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "briefcase.fill")
-                            .font(.system(size: 13, weight: .bold))
-                        Text("WA Business")
-                            .font(.system(size: 13, weight: .bold))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 36)
-                    .background(Color(red: 0.15, green: 0.78, blue: 0.35))
-                    .foregroundColor(.black)
-                    .cornerRadius(8)
-                }
-
-                // 2. Call Button
-                Button(action: {
-                    callNumber(pkg.cleanNumber)
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "phone.fill")
-                            .font(.system(size: 12, weight: .bold))
-                        Text("Call")
-                            .font(.system(size: 13, weight: .semibold))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 36)
-                    .background(Color.white.opacity(0.12))
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
-                }
-
-                // 3. Copy Button
-                Button(action: {
-                    copyNumber(pkg.cleanNumber)
-                }) {
-                    Image(systemName: "doc.on.doc")
-                        .font(.system(size: 13))
-                        .foregroundColor(.white)
-                        .frame(width: 36, height: 36)
-                        .background(Color.white.opacity(0.12))
-                        .cornerRadius(8)
-                }
+            .padding(14)
+            .background(isSelected ? Color(red: 0.15, green: 0.78, blue: 0.35).opacity(0.12) : Color.white.opacity(0.06))
+            .cornerRadius(16)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(isSelected ? Color(red: 0.15, green: 0.78, blue: 0.35) : Color.white.opacity(0.1), lineWidth: isSelected ? 2 : 1)
+            )
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if isSelectionMode {
+                toggleSelection(for: pkg.id)
             }
         }
-        .padding(14)
-        .background(Color.white.opacity(0.06))
-        .cornerRadius(16)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
-        )
+    }
+
+    private func toggleSelection(for id: UUID) {
+        if selectedPackageIDs.contains(id) {
+            selectedPackageIDs.remove(id)
+        } else {
+            selectedPackageIDs.insert(id)
+        }
+        let haptic = UIImpactFeedbackGenerator(style: .light)
+        haptic.impactOccurred()
     }
 
     // MARK: - Empty State View
