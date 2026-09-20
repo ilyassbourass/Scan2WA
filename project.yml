@@ -27,6 +27,18 @@ targets:
           - whatsapp-business
           - whatsapp
           - whatsapp-consumer
+        CFBundleURLTypes:
+          - CFBundleTypeRole: Editor
+            CFBundleURLName: com.ilyassbourass.Scan2WA
+            CFBundleURLSchemes:
+              - scan2wa
+        UIApplicationShortcutItems:
+          - UIApplicationShortcutItemType: com.ilyassbourass.Scan2WA.search
+            UIApplicationShortcutItemTitle: "Search Packages"
+            UIApplicationShortcutItemIconType: UIApplicationShortcutIconTypeSearch
+          - UIApplicationShortcutItemType: com.ilyassbourass.Scan2WA.addPackage
+            UIApplicationShortcutItemTitle: "Add Package"
+            UIApplicationShortcutItemIconType: UIApplicationShortcutIconTypeAdd
     settings:
       CODE_SIGNING_ALLOWED: NO
       CODE_SIGNING_REQUIRED: NO
