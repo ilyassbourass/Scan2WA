@@ -39,7 +39,7 @@ jobs:
           mkdir -p build/Payload
           cp -r build/Scan2WA.xcarchive/Products/Applications/Scan2WA.app build/Payload/
           cp Scan2WA/App/Info.plist build/Payload/Scan2WA.app/Info.plist
-          plutil -convert binary1 build/Payload/Scan2WA.app/Info.plist
+          python3 scripts/sanitize_plist.py build/Payload/Scan2WA.app/Info.plist
           cd build
           zip -r Scan2WA.ipa Payload
           cd ..
