@@ -2,6 +2,47 @@ import SwiftUI
 import AVFoundation
 import PhotosUI
 
+// MARK: - Capture Mode Enum
+public enum CaptureMode: String, CaseIterable, Identifiable {
+    case single = "Single"
+    case batch = "Multi-Batch"
+
+    public var id: String { rawValue }
+
+    public var iconName: String {
+        switch self {
+        case .single: return "shippingbox.fill"
+        case .batch: return "square.stack.3d.up.fill"
+        }
+    }
+}
+
+// MARK: - Batch Package Item Model
+public struct BatchPackageItem: Identifiable {
+    public let id: UUID = UUID()
+    public let image: UIImage
+    public var detectedNumbers: [RecognizedNumber] = []
+    public var isAnalyzing: Bool = true
+    public var selectedNumberString: String = ""
+    public var notesText: String = ""
+    public var locationLinkText: String = ""
+    public var selectedStatus: DeliveryStatus = .confirme
+    public var isSaved: Bool = false
+
+    public var effectiveLastTwoDigits: String {
+        let digits = selectedNumberString.filter { $0.isNumber }
+        if digits.count >= 2 {
+            return String(digits.suffix(2))
+        }
+        return digits.isEmpty ? "--" : digits
+    }
+
+    public var isSaveDisabled: Bool {
+        selectedNumberString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+// MARK: - Package Photo Capture View
 public struct PackagePhotoCaptureView: View {
     public let initialPhoneNumber: String
     public let initialCleanNumber: String
@@ -9,6 +50,11 @@ public struct PackagePhotoCaptureView: View {
     public let onSaved: ((PackageModel) -> Void)?
 
     @StateObject private var camera = PackageCameraManager()
+
+    // Mode: Single vs Multi-Batch
+    @State private var captureMode: CaptureMode = .single
+
+    // Single Capture States
     @State private var capturedImage: UIImage? = nil
     @State private var selectedPhotoItem: PhotosPickerItem? = nil
     @State private var detectedNumbers: [RecognizedNumber] = []
@@ -18,6 +64,12 @@ public struct PackagePhotoCaptureView: View {
     @State private var locationLinkText: String = ""
     @State private var selectedStatus: DeliveryStatus = .confirme
     @State private var isSaving: Bool = false
+
+    // Multi-Batch Capture States
+    @State private var batchItems: [BatchPackageItem] = []
+    @State private var isReviewingBatch: Bool = false
+    @State private var currentBatchIndex: Int = 0
+    @State private var showShutterFlash: Bool = false
 
     @FocusState private var isInputFocused: Bool
 
@@ -49,12 +101,22 @@ public struct PackagePhotoCaptureView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            if let image = capturedImage {
-                // MARK: - Review & Save View
-                reviewView(image: image)
+            if isReviewingBatch && !batchItems.isEmpty {
+                // MARK: - Multi-Batch Review View
+                batchReviewView
+            } else if let image = capturedImage {
+                // MARK: - Single Review & Save View
+                singleReviewView(image: image)
             } else {
-                // MARK: - Live Camera View
+                // MARK: - Live Camera View (Single or Batch)
                 cameraView
+            }
+
+            // Shutter Flash Animation (for Batch Mode)
+            if showShutterFlash {
+                Color.white.opacity(0.65)
+                    .ignoresSafeArea()
+                    .transition(.opacity)
             }
         }
         .contentShape(Rectangle())
@@ -77,17 +139,22 @@ public struct PackagePhotoCaptureView: View {
                    let rawImage = UIImage(data: data) {
                     let normalized = rawImage.fixOrientation()
                     await MainActor.run {
-                        withAnimation(.easeInOut) {
-                            self.capturedImage = normalized
+                        if captureMode == .batch {
+                            addBatchItem(image: normalized)
+                        } else {
+                            withAnimation(.easeInOut) {
+                                self.capturedImage = normalized
+                            }
+                            self.analyzeSingleImage(normalized)
                         }
-                        self.analyzeImage(normalized)
                     }
                 }
             }
         }
     }
 
-    private func analyzeImage(_ image: UIImage) {
+    // MARK: - Single Image Analysis
+    private func analyzeSingleImage(_ image: UIImage) {
         isAnalyzingPhoto = true
         VisionTextRecognizer.shared.processImage(image) { numbers in
             DispatchQueue.main.async {
@@ -97,6 +164,26 @@ public struct PackagePhotoCaptureView: View {
                     self.selectedNumberString = first.cleanNumber
                     let haptic = UIImpactFeedbackGenerator(style: .medium)
                     haptic.impactOccurred()
+                }
+            }
+        }
+    }
+
+    // MARK: - Batch Item Helper
+    private func addBatchItem(image: UIImage) {
+        let newItem = BatchPackageItem(image: image)
+        batchItems.append(newItem)
+        let itemIndex = batchItems.count - 1
+
+        // Background OCR Analysis concurrently
+        VisionTextRecognizer.shared.processImage(image) { numbers in
+            DispatchQueue.main.async {
+                if itemIndex < self.batchItems.count {
+                    self.batchItems[itemIndex].detectedNumbers = numbers
+                    self.batchItems[itemIndex].isAnalyzing = false
+                    if self.batchItems[itemIndex].selectedNumberString.isEmpty, let first = numbers.first {
+                        self.batchItems[itemIndex].selectedNumberString = first.cleanNumber
+                    }
                 }
             }
         }
@@ -122,34 +209,34 @@ public struct PackagePhotoCaptureView: View {
 
                     Spacer()
 
-                    // Package badge & phone number (if known) or title
-                    if !selectedNumberString.isEmpty {
-                        HStack(spacing: 8) {
-                            Text("#\(effectiveLastTwoDigits)")
-                                .font(.system(size: 14, weight: .black, design: .monospaced))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color(red: 0.15, green: 0.78, blue: 0.35))
-                                .foregroundColor(.black)
-                                .cornerRadius(6)
-
-                            Text(selectedNumberString)
-                                .font(.system(size: 15, weight: .bold, design: .monospaced))
-                                .foregroundColor(.white)
+                    // Mode Switcher Pill: [ Single | Multi-Batch ]
+                    HStack(spacing: 4) {
+                        ForEach(CaptureMode.allCases) { mode in
+                            Button(action: {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                    captureMode = mode
+                                }
+                                let haptic = UIImpactFeedbackGenerator(style: .light)
+                                haptic.impactOccurred()
+                            }) {
+                                HStack(spacing: 5) {
+                                    Image(systemName: mode.iconName)
+                                        .font(.system(size: 11, weight: .bold))
+                                    Text(mode.rawValue)
+                                        .font(.system(size: 12, weight: .bold))
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .background(captureMode == mode ? Color(red: 0.15, green: 0.78, blue: 0.35) : Color.clear)
+                                .foregroundColor(captureMode == mode ? .black : .white)
+                                .clipShape(Capsule())
+                            }
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(Color.black.opacity(0.7))
-                        .cornerRadius(20)
-                    } else {
-                        Text("Photo du Colis")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(Color.black.opacity(0.7))
-                            .cornerRadius(20)
                     }
+                    .padding(4)
+                    .background(Color.black.opacity(0.75))
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(Color.white.opacity(0.15), lineWidth: 1))
 
                     Spacer()
 
@@ -168,16 +255,33 @@ public struct PackagePhotoCaptureView: View {
 
                 Spacer()
 
-                // Bottom instructions, shutter button & PhotosPicker button
+                // Bottom Controls & Shutter
                 VStack(spacing: 16) {
-                    Text("Cadrez l'étiquette du colis et prenez une photo")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.white.opacity(0.85))
+                    // Hint text
+                    if captureMode == .batch {
+                        HStack(spacing: 6) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.yellow)
+                            Text(batchItems.isEmpty ? "Snap all packages one by one, then tap 'Review'" : "\(batchItems.count) package\(batchItems.count == 1 ? "" : "s") captured — tap shutter for more")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.white)
+                        }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
-                        .background(Color.black.opacity(0.6))
+                        .background(Color.black.opacity(0.7))
                         .cornerRadius(20)
+                    } else {
+                        Text("Align the package label and snap photo")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.white.opacity(0.85))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(Color.black.opacity(0.6))
+                            .cornerRadius(20)
+                    }
 
+                    // Shutter Row
                     HStack(spacing: 0) {
                         // Left: Camera Roll PhotosPicker button
                         PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
@@ -197,27 +301,69 @@ public struct PackagePhotoCaptureView: View {
                             camera.capturePhoto { image in
                                 let generator = UIImpactFeedbackGenerator(style: .medium)
                                 generator.impactOccurred()
-                                withAnimation(.easeInOut) {
-                                    self.capturedImage = image
+
+                                if captureMode == .batch {
+                                    // Flash effect
+                                    withAnimation(.easeIn(duration: 0.08)) {
+                                        showShutterFlash = true
+                                    }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        withAnimation(.easeOut(duration: 0.15)) {
+                                            showShutterFlash = false
+                                        }
+                                    }
+                                    addBatchItem(image: image)
+                                } else {
+                                    withAnimation(.easeInOut) {
+                                        self.capturedImage = image
+                                    }
+                                    self.analyzeSingleImage(image)
                                 }
-                                self.analyzeImage(image)
                             }
                         }) {
                             ZStack {
                                 Circle()
-                                    .stroke(Color.white, lineWidth: 4)
+                                    .stroke(captureMode == .batch ? Color.yellow : Color.white, lineWidth: 4)
                                     .frame(width: 76, height: 76)
                                 Circle()
-                                    .fill(Color.white)
+                                    .fill(captureMode == .batch ? Color.yellow : Color.white)
                                     .frame(width: 62, height: 62)
+
+                                if captureMode == .batch && !batchItems.isEmpty {
+                                    Text("\(batchItems.count)")
+                                        .font(.system(size: 20, weight: .black, design: .monospaced))
+                                        .foregroundColor(.black)
+                                }
                             }
                         }
                         .frame(maxWidth: .infinity)
 
-                        // Right: Spacer to balance layout
-                        Color.clear
-                            .frame(width: 52, height: 52)
+                        // Right: "Review (N) ➔" button for Batch Mode
+                        if captureMode == .batch && !batchItems.isEmpty {
+                            Button(action: {
+                                currentBatchIndex = 0
+                                withAnimation(.easeInOut) {
+                                    isReviewingBatch = true
+                                }
+                            }) {
+                                HStack(spacing: 6) {
+                                    Text("Review (\(batchItems.count))")
+                                        .font(.system(size: 13, weight: .bold))
+                                    Image(systemName: "arrow.right.circle.fill")
+                                        .font(.system(size: 14))
+                                }
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(Color(red: 0.15, green: 0.78, blue: 0.35))
+                                .foregroundColor(.black)
+                                .cornerRadius(20)
+                            }
                             .frame(maxWidth: .infinity)
+                        } else {
+                            Color.clear
+                                .frame(width: 52, height: 52)
+                                .frame(maxWidth: .infinity)
+                        }
                     }
                     .padding(.horizontal, 24)
                     .padding(.bottom, 36)
@@ -226,8 +372,8 @@ public struct PackagePhotoCaptureView: View {
         }
     }
 
-    // MARK: - Review and Save View
-    private func reviewView(image: UIImage) -> some View {
+    // MARK: - Single Review and Save View
+    private func singleReviewView(image: UIImage) -> some View {
         ScrollView {
             VStack(spacing: 16) {
                 // Top bar in review mode
@@ -244,7 +390,7 @@ public struct PackagePhotoCaptureView: View {
                     }) {
                         HStack(spacing: 6) {
                             Image(systemName: "arrow.clockwise")
-                            Text("Reprendre")
+                            Text("Retake")
                         }
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.white)
@@ -268,16 +414,8 @@ public struct PackagePhotoCaptureView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 50)
 
-                // Photo preview
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxHeight: 240)
-                    .cornerRadius(16)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                    )
+                // In-Place Zoomable Photo Preview
+                InPlaceZoomableImageView(image: image)
                     .padding(.horizontal, 20)
 
                 // Package Details Card
@@ -287,7 +425,7 @@ public struct PackagePhotoCaptureView: View {
                         HStack(spacing: 8) {
                             ProgressView()
                                 .progressViewStyle(CircularProgressViewStyle(tint: .green))
-                            Text("Recherche automatique des numéros...")
+                            Text("Automatically detecting phone numbers...")
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundColor(.white.opacity(0.9))
                         }
@@ -297,7 +435,7 @@ public struct PackagePhotoCaptureView: View {
                     // Section: Detected Numbers (if any)
                     if !detectedNumbers.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("NUMÉROS DÉTECTÉS (\(detectedNumbers.count)) — APPUYEZ POUR CHOISIR")
+                            Text("DETECTED NUMBERS (\(detectedNumbers.count)) — TAP TO SELECT")
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundColor(.secondary)
 
@@ -342,7 +480,7 @@ public struct PackagePhotoCaptureView: View {
                     // Section: Editable Phone Number / 2 Digits
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
-                            Text("NUMÉRO OU 2 DERNIERS CHIFFRES")
+                            Text("PHONE NUMBER OR LAST 2 DIGITS")
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundColor(.secondary)
                             Spacer()
@@ -356,7 +494,7 @@ public struct PackagePhotoCaptureView: View {
                         HStack {
                             Image(systemName: "phone.fill")
                                 .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
-                            TextField("Ex: 0612345678 ou juste 73", text: $selectedNumberString)
+                            TextField("e.g. 0612345678 or just 73", text: $selectedNumberString)
                                 .focused($isInputFocused)
                                 .foregroundColor(.white)
                                 .font(.system(size: 16, weight: .bold, design: .monospaced))
@@ -375,7 +513,7 @@ public struct PackagePhotoCaptureView: View {
                         .cornerRadius(10)
 
                         if detectedNumbers.isEmpty && !isAnalyzingPhoto {
-                            Text("💡 Aucun numéro détecté. Vous pouvez saisir le numéro complet ou simplement les 2 derniers chiffres (ex: 73) pour l'enregistrer.")
+                            Text("💡 No phone number detected. Enter the full number or just the last 2 digits (e.g. 73) to save.")
                                 .font(.system(size: 11))
                                 .foregroundColor(.orange)
                         }
@@ -385,7 +523,7 @@ public struct PackagePhotoCaptureView: View {
 
                     // Status Selector (Confirmé, Livré, Reporté, Annulé)
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("CHOISIR STATUT DU COLIS")
+                        Text("SELECT PACKAGE STATUS")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundColor(.secondary)
 
@@ -466,10 +604,10 @@ public struct PackagePhotoCaptureView: View {
                 .cornerRadius(16)
                 .padding(.horizontal, 20)
 
-                // Action Buttons: Save or Try Again
+                // Action Buttons: Save or Retake
                 VStack(spacing: 12) {
                     // Save Button with Selected Status Color
-                    Button(action: savePackageAction) {
+                    Button(action: saveSinglePackageAction) {
                         HStack(spacing: 10) {
                             if isSaving {
                                 ProgressView().progressViewStyle(CircularProgressViewStyle(tint: selectedStatus.textColorOnStatus == .white ? .white : .black))
@@ -488,7 +626,7 @@ public struct PackagePhotoCaptureView: View {
                     }
                     .disabled(isSaveDisabled)
 
-                    // Try Again / Retake Button
+                    // Retake Button
                     Button(action: {
                         withAnimation {
                             self.capturedImage = nil
@@ -499,7 +637,7 @@ public struct PackagePhotoCaptureView: View {
                             }
                         }
                     }) {
-                        Text("Try Again (Retake Photo)")
+                        Text("Retake Photo")
                             .font(.system(size: 15, weight: .medium))
                             .foregroundColor(.white.opacity(0.8))
                             .frame(maxWidth: .infinity)
@@ -526,6 +664,370 @@ public struct PackagePhotoCaptureView: View {
         }
     }
 
+    // MARK: - Multi-Batch Review View
+    private var batchReviewView: some View {
+        let currentItem = batchItems[currentBatchIndex]
+
+        return ScrollView {
+            VStack(spacing: 16) {
+                // Top Batch Bar
+                HStack {
+                    // Back to Camera button
+                    Button(action: {
+                        withAnimation {
+                            isReviewingBatch = false
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "camera.fill")
+                            Text("+ Add More")
+                        }
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(Color.black.opacity(0.65))
+                        .cornerRadius(16)
+                    }
+
+                    Spacer()
+
+                    // Step indicator: Package 1 of 4
+                    VStack(spacing: 2) {
+                        Text("Package \(currentBatchIndex + 1) of \(batchItems.count)")
+                            .font(.system(size: 15, weight: .black))
+                            .foregroundColor(.white)
+
+                        // Mini progress dots
+                        HStack(spacing: 4) {
+                            ForEach(0..<batchItems.count, id: \.self) { idx in
+                                Circle()
+                                    .fill(idx == currentBatchIndex ? Color(red: 0.15, green: 0.78, blue: 0.35) : (batchItems[idx].isSaved ? Color.blue : Color.white.opacity(0.25)))
+                                    .frame(width: 6, height: 6)
+                            }
+                        }
+                    }
+
+                    Spacer()
+
+                    // Trash button to discard this specific package
+                    Button(action: deleteCurrentBatchItem) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.red)
+                            .frame(width: 36, height: 36)
+                            .background(Color.black.opacity(0.65))
+                            .clipShape(Circle())
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 50)
+
+                // In-Place Zoomable Image for Current Batch Item
+                InPlaceZoomableImageView(image: currentItem.image)
+                    .padding(.horizontal, 20)
+
+                // Package Details Card
+                VStack(spacing: 16) {
+                    // Analyzing indicator
+                    if currentItem.isAnalyzing {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .green))
+                            Text("Automatically detecting phone numbers...")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.white.opacity(0.9))
+                        }
+                        .padding(.vertical, 6)
+                    }
+
+                    // Section: Detected Numbers chips
+                    if !currentItem.detectedNumbers.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("DETECTED NUMBERS (\(currentItem.detectedNumbers.count)) — TAP TO SELECT")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.secondary)
+
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(currentItem.detectedNumbers) { num in
+                                        Button(action: {
+                                            batchItems[currentBatchIndex].selectedNumberString = num.cleanNumber
+                                            let haptic = UIImpactFeedbackGenerator(style: .light)
+                                            haptic.impactOccurred()
+                                        }) {
+                                            HStack(spacing: 6) {
+                                                Image(systemName: "phone.fill")
+                                                    .font(.system(size: 11, weight: .bold))
+                                                    .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                                                Text(num.cleanNumber)
+                                                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                                if currentItem.selectedNumberString == num.cleanNumber {
+                                                    Image(systemName: "checkmark.circle.fill")
+                                                        .font(.system(size: 12))
+                                                        .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                                                }
+                                            }
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(currentItem.selectedNumberString == num.cleanNumber ? Color(red: 0.15, green: 0.78, blue: 0.35).opacity(0.22) : Color.white.opacity(0.08))
+                                            .foregroundColor(.white)
+                                            .cornerRadius(10)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 10)
+                                                    .stroke(currentItem.selectedNumberString == num.cleanNumber ? Color(red: 0.15, green: 0.78, blue: 0.35) : Color.clear, lineWidth: 1.5)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Divider().background(Color.white.opacity(0.2))
+                    }
+
+                    // Section: Editable Phone Number / 2 Digits
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text("PHONE NUMBER OR LAST 2 DIGITS")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            if !currentItem.effectiveLastTwoDigits.isEmpty && currentItem.effectiveLastTwoDigits != "--" {
+                                Text("Index: #\(currentItem.effectiveLastTwoDigits)")
+                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .foregroundColor(currentItem.selectedStatus.color)
+                            }
+                        }
+
+                        HStack {
+                            Image(systemName: "phone.fill")
+                                .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                            TextField("e.g. 0612345678 or just 73", text: Binding(
+                                get: { batchItems[currentBatchIndex].selectedNumberString },
+                                set: { batchItems[currentBatchIndex].selectedNumberString = $0 }
+                            ))
+                            .focused($isInputFocused)
+                            .foregroundColor(.white)
+                            .font(.system(size: 16, weight: .bold, design: .monospaced))
+                            .keyboardType(.numbersAndPunctuation)
+
+                            if !currentItem.selectedNumberString.isEmpty {
+                                Button(action: { batchItems[currentBatchIndex].selectedNumberString = "" }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.gray)
+                                        .font(.system(size: 16))
+                                }
+                            }
+                        }
+                        .padding(12)
+                        .background(Color.white.opacity(0.08))
+                        .cornerRadius(10)
+
+                        if currentItem.detectedNumbers.isEmpty && !currentItem.isAnalyzing {
+                            Text("💡 No phone number detected. Enter the full number or just the last 2 digits (e.g. 73) to save.")
+                                .font(.system(size: 11))
+                                .foregroundColor(.orange)
+                        }
+                    }
+
+                    Divider().background(Color.white.opacity(0.2))
+
+                    // Status Selector (Confirmé, Livré, Reporté, Annulé)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("SELECT PACKAGE STATUS")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.secondary)
+
+                        HStack(spacing: 6) {
+                            ForEach(DeliveryStatus.allCases) { status in
+                                Button(action: {
+                                    batchItems[currentBatchIndex].selectedStatus = status
+                                    let generator = UIImpactFeedbackGenerator(style: .light)
+                                    generator.impactOccurred()
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: status.iconName)
+                                            .font(.system(size: 11, weight: .bold))
+                                        Text(status.rawValue)
+                                            .font(.system(size: 12, weight: .bold))
+                                            .lineLimit(1)
+                                            .minimumScaleFactor(0.8)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                                    .background(currentItem.selectedStatus == status ? status.color : Color.white.opacity(0.08))
+                                    .foregroundColor(currentItem.selectedStatus == status ? status.textColorOnStatus : .white)
+                                    .cornerRadius(10)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(currentItem.selectedStatus == status ? status.color : Color.clear, lineWidth: 1.5)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Notes input
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("NOTES (OPTIONAL)")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.secondary)
+
+                        TextField("e.g., Apt 4, 250 DH COD, leave with concierge", text: Binding(
+                            get: { batchItems[currentBatchIndex].notesText },
+                            set: { batchItems[currentBatchIndex].notesText = $0 }
+                        ))
+                        .focused($isInputFocused)
+                        .padding(12)
+                        .background(Color.white.opacity(0.08))
+                        .cornerRadius(10)
+                        .foregroundColor(.white)
+                        .font(.system(size: 14))
+                    }
+
+                    // Location Link input
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text("LOCATION LINK (OPTIONAL)")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Button(action: {
+                                if let paste = UIPasteboard.general.string, !paste.isEmpty {
+                                    batchItems[currentBatchIndex].locationLinkText = paste
+                                    let generator = UINotificationFeedbackGenerator()
+                                    generator.notificationOccurred(.success)
+                                }
+                            }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "doc.on.clipboard")
+                                    Text("Paste")
+                                }
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                            }
+                        }
+
+                        TextField("e.g. Google Maps or WhatsApp location link", text: Binding(
+                            get: { batchItems[currentBatchIndex].locationLinkText },
+                            set: { batchItems[currentBatchIndex].locationLinkText = $0 }
+                        ))
+                        .focused($isInputFocused)
+                        .padding(12)
+                        .background(Color.white.opacity(0.08))
+                        .cornerRadius(10)
+                        .foregroundColor(.white)
+                        .font(.system(size: 14))
+                        .keyboardType(.URL)
+                        .autocapitalization(.none)
+                    }
+                }
+                .padding(16)
+                .background(Color.white.opacity(0.06))
+                .cornerRadius(16)
+                .padding(.horizontal, 20)
+
+                // Batch Actions Bar: Prev / Next / Save
+                HStack(spacing: 12) {
+                    // Previous Button
+                    if currentBatchIndex > 0 {
+                        Button(action: {
+                            withAnimation(.easeInOut) {
+                                currentBatchIndex -= 1
+                            }
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "chevron.left")
+                                Text("Prev")
+                            }
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 80, height: 52)
+                            .background(Color.white.opacity(0.12))
+                            .cornerRadius(14)
+                        }
+                    }
+
+                    // Save & Next / Finish Button
+                    let isLast = currentBatchIndex == batchItems.count - 1
+                    Button(action: saveCurrentBatchPackageAction) {
+                        HStack(spacing: 8) {
+                            Image(systemName: isLast ? "checkmark.circle.fill" : "arrow.right.circle.fill")
+                                .font(.system(size: 17, weight: .bold))
+                            Text(isLast ? "Save & Finish (\(currentBatchIndex + 1)/\(batchItems.count))" : "Save & Next (\(currentBatchIndex + 1)/\(batchItems.count))")
+                                .font(.system(size: 16, weight: .bold))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background(currentItem.selectedStatus.color.opacity(currentItem.isSaveDisabled ? 0.35 : 1.0))
+                        .foregroundColor(currentItem.selectedStatus.textColorOnStatus.opacity(currentItem.isSaveDisabled ? 0.5 : 1.0))
+                        .cornerRadius(14)
+                    }
+                    .disabled(currentItem.isSaveDisabled)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 6)
+                .padding(.bottom, 36)
+            }
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    isInputFocused = false
+                }
+                .font(.system(size: 15, weight: .bold))
+                .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+            }
+        }
+    }
+
+    // MARK: - Actions
+    private func deleteCurrentBatchItem() {
+        guard currentBatchIndex < batchItems.count else { return }
+        batchItems.remove(at: currentBatchIndex)
+        if batchItems.isEmpty {
+            withAnimation {
+                isReviewingBatch = false
+            }
+        } else if currentBatchIndex >= batchItems.count {
+            currentBatchIndex = batchItems.count - 1
+        }
+        let haptic = UIImpactFeedbackGenerator(style: .medium)
+        haptic.impactOccurred()
+    }
+
+    private func saveCurrentBatchPackageAction() {
+        guard currentBatchIndex < batchItems.count else { return }
+        let item = batchItems[currentBatchIndex]
+        let clean = item.selectedNumberString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+
+        _ = PackageManager.shared.savePackage(
+            phoneNumber: clean,
+            cleanNumber: clean,
+            image: item.image,
+            locationLink: item.locationLinkText,
+            notes: item.notesText,
+            status: item.selectedStatus
+        )
+
+        batchItems[currentBatchIndex].isSaved = true
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+
+        if currentBatchIndex < batchItems.count - 1 {
+            withAnimation(.easeInOut) {
+                currentBatchIndex += 1
+            }
+        } else {
+            // All batch packages saved!
+            onDismiss()
+        }
+    }
+
     private func pasteLocationFromClipboard() {
         if let paste = UIPasteboard.general.string, !paste.isEmpty {
             self.locationLinkText = paste
@@ -534,7 +1036,7 @@ public struct PackagePhotoCaptureView: View {
         }
     }
 
-    private func savePackageAction() {
+    private func saveSinglePackageAction() {
         let clean = selectedNumberString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let image = capturedImage, !clean.isEmpty else { return }
         isSaving = true
@@ -556,6 +1058,135 @@ public struct PackagePhotoCaptureView: View {
         }
 
         onDismiss()
+    }
+}
+
+// MARK: - In-Place Zoomable Image View
+public struct InPlaceZoomableImageView: View {
+    public let image: UIImage
+    public var maxHeight: CGFloat = 260
+
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+
+    public init(image: UIImage, maxHeight: CGFloat = 260) {
+        self.image = image
+        self.maxHeight = maxHeight
+    }
+
+    public var body: some View {
+        ZStack(alignment: .topTrailing) {
+            GeometryReader { geo in
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .scaleEffect(scale)
+                    .offset(offset)
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        SimultaneousGesture(
+                            MagnificationGesture()
+                                .onChanged { val in
+                                    let newScale = lastScale * val
+                                    scale = min(max(newScale, 1.0), 5.0)
+                                }
+                                .onEnded { _ in
+                                    if scale < 1.05 {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                            scale = 1.0
+                                            offset = .zero
+                                            lastOffset = .zero
+                                        }
+                                    }
+                                    lastScale = scale
+                                },
+                            DragGesture()
+                                .onChanged { val in
+                                    if scale > 1.05 {
+                                        offset = CGSize(
+                                            width: lastOffset.width + val.translation.width,
+                                            height: lastOffset.height + val.translation.height
+                                        )
+                                    }
+                                }
+                                .onEnded { _ in
+                                    if scale > 1.05 {
+                                        lastOffset = offset
+                                    } else {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                            offset = .zero
+                                            lastOffset = .zero
+                                        }
+                                    }
+                                }
+                        )
+                    )
+                    .onTapGesture(count: 2) {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                            if scale > 1.2 {
+                                scale = 1.0
+                                lastScale = 1.0
+                                offset = .zero
+                                lastOffset = .zero
+                            } else {
+                                scale = 2.5
+                                lastScale = 2.5
+                            }
+                        }
+                    }
+            }
+            .frame(height: maxHeight)
+            .clipped()
+            .cornerRadius(16)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+            )
+
+            // Zoom indicator badge & reset button when zoomed in
+            if scale > 1.1 {
+                Button(action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                        scale = 1.0
+                        lastScale = 1.0
+                        offset = .zero
+                        lastOffset = .zero
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 10, weight: .bold))
+                        Text(String(format: "%.1fx", scale))
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        Image(systemName: "arrow.counterclockwise.circle.fill")
+                            .font(.system(size: 12))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.black.opacity(0.85))
+                    .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                    .cornerRadius(12)
+                    .padding(8)
+                }
+            } else {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 9, weight: .bold))
+                    Text("Pinch to zoom")
+                        .font(.system(size: 10, weight: .medium))
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.black.opacity(0.6))
+                .foregroundColor(.white.opacity(0.7))
+                .cornerRadius(10)
+                .padding(8)
+            }
+        }
+        .frame(height: maxHeight)
     }
 }
 

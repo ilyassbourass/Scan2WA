@@ -7,7 +7,7 @@ public struct PackagesListView: View {
     @EnvironmentObject private var navigationState: AppNavigationState
 
     @State private var searchQuery: String = ""
-    @State private var selectedStatusFilter: DeliveryStatus? = nil // nil = "Tous"
+    @State private var selectedStatusFilter: DeliveryStatus? = nil // nil = "All"
     @State private var selectedPhotoForPreview: UIImage? = nil
     @State private var packageToEdit: PackageModel? = nil
     @State private var packageToDelete: PackageModel? = nil
@@ -38,7 +38,7 @@ public struct PackagesListView: View {
                     // Search Bar
                     searchBarView
 
-                    // Status Filter Tabs (Tous, Livré, Reporté, Annulé)
+                    // Status Filter Tabs (All, Livré, Reporté, Annulé)
                     statusFilterTabs
 
                     // Content
@@ -77,7 +77,7 @@ public struct PackagesListView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Text("\(packageManager.packages.count) \(packageManager.packages.count == 1 ? "colis" : "colis")")
+                    Text("\(packageManager.packages.count) \(packageManager.packages.count == 1 ? "package" : "packages")")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.secondary)
                 }
@@ -125,7 +125,7 @@ public struct PackagesListView: View {
                     UIPasteboard.general.string = "scan2wa://search"
                     let haptic = UINotificationFeedbackGenerator()
                     haptic.notificationOccurred(.success)
-                    copiedBannerText = "URL 'scan2wa://search' copiée !"
+                    copiedBannerText = "URL 'scan2wa://search' copied!"
                     withAnimation {
                         showCopiedBanner = true
                     }
@@ -212,14 +212,14 @@ public struct PackagesListView: View {
     private var statusFilterTabs: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                // Tab: Tous
+                // Tab: All
                 Button(action: {
                     selectedStatusFilter = nil
                     let generator = UIImpactFeedbackGenerator(style: .light)
                     generator.impactOccurred()
                 }) {
                     HStack(spacing: 6) {
-                        Text("Tous")
+                        Text("All")
                             .font(.system(size: 13, weight: .bold))
                         Text("\(packageManager.packages.count)")
                             .font(.system(size: 11, weight: .black))
@@ -517,7 +517,7 @@ public struct PackagesListView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 16, weight: .bold))
-                        Text("Ajouter un Colis")
+                        Text("Add Package")
                             .font(.system(size: 15, weight: .bold))
                     }
                     .padding(.horizontal, 22)
@@ -617,7 +617,7 @@ fileprivate struct EditPackageSheet: View {
                     VStack(spacing: 16) {
                         // Status Picker
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("STATUT")
+                            Text("STATUS")
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundColor(.secondary)
 
@@ -779,10 +779,10 @@ fileprivate struct ShortcutGuideSheetView: View {
                     VStack(alignment: .leading, spacing: 20) {
                         // Header
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Accès Rapide & Raccourcis")
+                            Text("Quick Access & Shortcuts")
                                 .font(.system(size: 20, weight: .black))
                                 .foregroundColor(.white)
-                            Text("Accédez instantanément à la recherche et à l'ajout de colis en 1 seul geste.")
+                            Text("Instantly access package search and parcel intake in a single tap.")
                                 .font(.system(size: 14))
                                 .foregroundColor(.secondary)
                         }
@@ -793,12 +793,12 @@ fileprivate struct ShortcutGuideSheetView: View {
                                 Image(systemName: "hand.tap.fill")
                                     .foregroundColor(.orange)
                                     .font(.system(size: 16, weight: .bold))
-                                Text("1. Appui Long sur l'icône (Écran d'accueil)")
+                                Text("1. Long-press App Icon (Home Screen)")
                                     .font(.system(size: 15, weight: .bold))
                                     .foregroundColor(.white)
                             }
 
-                            Text("Sur votre écran d'accueil iPhone, maintenez le doigt appuyé sur l'icône Scan2WA pour afficher le menu rapide :")
+                            Text("On your iPhone home screen, press and hold the Scan2WA icon to access quick actions:")
                                 .font(.system(size: 13))
                                 .foregroundColor(.white.opacity(0.85))
 
@@ -806,14 +806,14 @@ fileprivate struct ShortcutGuideSheetView: View {
                                 HStack(spacing: 10) {
                                     Image(systemName: "magnifyingglass")
                                         .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
-                                    Text("🔍 Rechercher un Colis (ouvre la recherche directement)")
+                                    Text("🔍 Search Packages (opens search directly)")
                                         .font(.system(size: 13, weight: .semibold))
                                         .foregroundColor(.white)
                                 }
                                 HStack(spacing: 10) {
                                     Image(systemName: "plus.circle")
                                         .foregroundColor(.cyan)
-                                    Text("📦 Ajouter un Colis (ouvre l'appareil photo)")
+                                    Text("📦 Add Package (opens camera intake)")
                                         .font(.system(size: 13, weight: .semibold))
                                         .foregroundColor(.white)
                                 }
@@ -832,21 +832,21 @@ fileprivate struct ShortcutGuideSheetView: View {
                                 Image(systemName: "bolt.fill")
                                     .foregroundColor(.yellow)
                                     .font(.system(size: 16, weight: .bold))
-                                Text("2. Raccourci iOS personnalisé")
+                                Text("2. Custom iOS Shortcut")
                                     .font(.system(size: 15, weight: .bold))
                                     .foregroundColor(.white)
                             }
 
-                            Text("Vous pouvez créer un widget ou une icône 1-clic avec l'app Raccourcis d'Apple :")
+                            Text("Create a 1-tap home screen icon or widget using Apple's Shortcuts app:")
                                 .font(.system(size: 13))
                                 .foregroundColor(.white.opacity(0.85))
 
                             VStack(alignment: .leading, spacing: 6) {
-                                Text("1. Ouvrez l'application **Raccourcis** sur iPhone.")
-                                Text("2. Touchez **+** pour créer un raccourci.")
-                                Text("3. Ajoutez l'action **Ouvrir l'URL** (Open URL).")
-                                Text("4. Collez : **scan2wa://search**")
-                                Text("5. Touchez **Sur l'écran d'accueil**.")
+                                Text("1. Open the **Shortcuts** app on your iPhone.")
+                                Text("2. Tap **+** to create a new shortcut.")
+                                Text("3. Add the **Open URL** action.")
+                                Text("4. Paste: **scan2wa://search**")
+                                Text("5. Tap **Add to Home Screen**.")
                             }
                             .font(.system(size: 13))
                             .foregroundColor(.secondary)
@@ -857,7 +857,7 @@ fileprivate struct ShortcutGuideSheetView: View {
                             }) {
                                 HStack(spacing: 8) {
                                     Image(systemName: "doc.on.doc.fill")
-                                    Text("Copier l'URL scan2wa://search")
+                                    Text("Copy URL: scan2wa://search")
                                 }
                                 .font(.system(size: 14, weight: .bold))
                                 .frame(maxWidth: .infinity)
@@ -877,11 +877,11 @@ fileprivate struct ShortcutGuideSheetView: View {
                     .padding(20)
                 }
             }
-            .navigationTitle("Raccourcis")
+            .navigationTitle("Shortcuts")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Fermer") {
+                    Button("Close") {
                         presentationMode.wrappedValue.dismiss()
                     }
                     .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
