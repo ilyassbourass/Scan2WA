@@ -58,27 +58,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create v1.10.0 build/Scan2WA.ipa \
-            --title "Scan2WA v1.10.0 (Direct '+' Package Add, One-Shot OCR, Photos Library Import, 2-Digit Manual Indexing, iOS Shortcuts)" \
-            --notes "### Scan2WA v1.10.0
-
-          Ready-to-sideload unsigned IPA for **LiveContainer** / AltStore / SideStore on iPhone 15 Pro Max (iOS 16+).
-
-          **What's New in v1.10.0:**
-          - **Direct '+' Package Add Button**:
-            - Tap the '+' button in the Packages header or empty state to directly snap a photo or import an existing package photo.
-          - **One-Shot OCR Capture & Number Selection**:
-            - Snap 1 single photo of the package. Vision OCR automatically analyzes the image, extracts all phone numbers, and displays them as selectable chips (\`[ 📞 06... ✓ ]\`).
-            - Simply tap the detected number and hit Save!
-          - **Apple Photos Camera Roll Import**:
-            - Standard native iOS \`PhotosPicker\` button right next to the camera shutter so you can import photos taken earlier.
-          - **Manual Phone Number or 2-Digit Indexing**:
-            - Even if OCR doesn't find a number (or for handwritten labels), you can type the full number or just the **last 2 digits** (e.g. \`73\`) to immediately create an index badge (\`#73\`).
-            - Searching \`73\` in Packages will instantly match and show the package!
-          - **iOS Shortcuts Deep Linking & 3D Touch Quick Actions**:
-            - Deep link scheme registered: \`scan2wa://search\` opens directly to package search with search bar focused and keyboard raised.
-            - Home Screen 3D Touch Quick Actions: Long press the app icon on your Home Screen to choose between '🔍 Rechercher un Colis' and '📦 Ajouter un Colis'.
-            - In-app Shortcut Guide sheet with 1-tap 'Copier l'URL' button.
-          - **All 4 Delivery Statuses Preserved**:
-            - **🔵 Confirmé**, **🟢 Livré**, **🟠 Reporté**, and **🔴 Annulé**." \
-            || gh release upload v1.10.0 build/Scan2WA.ipa --clobber || true
+          VERSION=$(python3 -c "import plistlib; print(plistlib.load(open('Scan2WA/App/Info.plist', 'rb'))['CFBundleShortVersionString'])")
+          TAG="v${VERSION}"
+          echo "Releasing for tag: $TAG"
+          gh release create "$TAG" build/Scan2WA.ipa \
+            --title "Scan2WA $TAG" \
+            --notes "Ready-to-sideload unsigned IPA for **LiveContainer**, **SideStore**, **AltStore**, and **iLoader** on iOS 16+." \
+            || gh release upload "$TAG" build/Scan2WA.ipa --clobber || true

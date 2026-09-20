@@ -81,7 +81,7 @@ public struct MainScannerView: View {
                                     .font(.system(size: 18, weight: .semibold))
                                     .foregroundColor(cameraManager.isTorchOn ? .yellow : .white)
                                     .frame(width: 44, height: 44)
-                                    .background(Color.black.opacity(0.6))
+                                    .background(Color.black.opacity(0.65))
                                     .clipShape(Circle())
                             }
                         } else {
@@ -90,73 +90,62 @@ public struct MainScannerView: View {
 
                         Spacer()
 
-                        // Packages Inventory Button
+                        // Country Code Prefix & Settings Button (Center)
+                        Button(action: {
+                            showSettings = true
+                        }) {
+                            HStack(spacing: 5) {
+                                Image(systemName: "globe")
+                                    .font(.system(size: 13))
+                                Text(defaultCountryPrefix.isEmpty ? "+212" : defaultCountryPrefix)
+                                    .font(.system(size: 14, weight: .bold))
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .frame(minHeight: 44)
+                            .background(Color.black.opacity(0.65))
+                            .foregroundColor(.white)
+                            .cornerRadius(22)
+                        }
+
+                        Spacer()
+
+                        // Packages Inventory Button (Top Right, enlarged for quick finger access)
                         Button(action: {
                             showPackagesList = true
                         }) {
-                            HStack(spacing: 5) {
+                            HStack(spacing: 7) {
                                 Image(systemName: "shippingbox.fill")
-                                    .font(.system(size: 13, weight: .bold))
+                                    .font(.system(size: 16, weight: .bold))
                                     .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
 
                                 Text("Packages")
-                                    .font(.system(size: 13, weight: .bold))
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(.white)
 
                                 if packageManager.packages.count > 0 {
                                     Text("\(packageManager.packages.count)")
-                                        .font(.system(size: 11, weight: .black))
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
+                                        .font(.system(size: 12, weight: .black))
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 3)
                                         .background(Color(red: 0.15, green: 0.78, blue: 0.35))
                                         .foregroundColor(.black)
                                         .clipShape(Capsule())
                                 }
                             }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color.black.opacity(0.65))
-                            .foregroundColor(.white)
-                            .cornerRadius(20)
-                        }
-
-                        Spacer()
-
-                        // Country Code Prefix & Settings Button
-                        Button(action: {
-                            showSettings = true
-                        }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "globe")
-                                    .font(.system(size: 12))
-                                Text(defaultCountryPrefix.isEmpty ? "+212" : defaultCountryPrefix)
-                                    .font(.system(size: 14, weight: .bold))
-                            }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(Color.black.opacity(0.6))
-                            .foregroundColor(.white)
-                            .cornerRadius(20)
-                        }
-
-                        Spacer()
-
-                        // Right Top Button: "Scan Again" when frozen, or Manual Freeze when live
-                        Button(action: {
-                            if cameraManager.capturedImage != nil {
-                                cameraManager.resetScan()
-                            } else {
-                                cameraManager.triggerManualFreeze()
-                            }
-                        }) {
-                            Image(systemName: cameraManager.capturedImage != nil ? "arrow.clockwise" : "camera.metering.spot")
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundColor(cameraManager.capturedImage != nil ? .green : .white)
-                                .frame(width: 44, height: 44)
-                                .background(Color.black.opacity(0.6))
-                                .clipShape(Circle())
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .frame(minHeight: 46)
+                            .background(Color.black.opacity(0.75))
+                            .cornerRadius(23)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 23)
+                                    .stroke(Color(red: 0.15, green: 0.78, blue: 0.35).opacity(0.5), lineWidth: 1.5)
+                            )
+                            .shadow(color: Color(red: 0.15, green: 0.78, blue: 0.35).opacity(0.25), radius: 6, x: 0, y: 2)
                         }
                     }
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, 16)
                     .padding(.top, 50)
 
                     // Frozen Photo Status Badge

@@ -54,9 +54,11 @@ public struct PackagePhotoCaptureView: View {
     // Mode: Single vs Multi-Batch
     @State private var captureMode: CaptureMode = .single
 
-    // Single Capture States
+    // Single & Multi Photo Selection States
     @State private var capturedImage: UIImage? = nil
-    @State private var selectedPhotoItem: PhotosPickerItem? = nil
+    @State private var selectedPhotoItems: [PhotosPickerItem] = []
+    @State private var isLoadingPhotos: Bool = false
+    @State private var loadingPhotosCount: Int = 0
     @State private var detectedNumbers: [RecognizedNumber] = []
     @State private var isAnalyzingPhoto: Bool = false
     @State private var selectedNumberString: String = ""
@@ -118,6 +120,30 @@ public struct PackagePhotoCaptureView: View {
                     .ignoresSafeArea()
                     .transition(.opacity)
             }
+
+            // Loading Photos Overlay
+            if isLoadingPhotos {
+                ZStack {
+                    Color.black.opacity(0.7).ignoresSafeArea()
+                    VStack(spacing: 14) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: Color(red: 0.15, green: 0.78, blue: 0.35)))
+                            .scaleEffect(1.3)
+                        Text("Importing \(loadingPhotosCount) photos...")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 20)
+                    .background(Color.black.opacity(0.85))
+                    .cornerRadius(16)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                    )
+                }
+                .transition(.opacity)
+            }
         }
         .contentShape(Rectangle())
         .onTapGesture {
@@ -132,22 +158,39 @@ public struct PackagePhotoCaptureView: View {
         .onDisappear {
             camera.stop()
         }
-        .onChange(of: selectedPhotoItem) { _, newItem in
-            guard let newItem = newItem else { return }
+        .onChange(of: selectedPhotoItems) { _, newItems in
+            guard !newItems.isEmpty else { return }
+            isLoadingPhotos = true
+            loadingPhotosCount = newItems.count
             Task {
-                if let data = try? await newItem.loadTransferable(type: Data.self),
-                   let rawImage = UIImage(data: data) {
-                    let normalized = rawImage.fixOrientation()
-                    await MainActor.run {
-                        if captureMode == .batch {
-                            addBatchItem(image: normalized)
-                        } else {
-                            withAnimation(.easeInOut) {
-                                self.capturedImage = normalized
-                            }
-                            self.analyzeSingleImage(normalized)
+                var loadedImages: [UIImage] = []
+                for item in newItems {
+                    if let data = try? await item.loadTransferable(type: Data.self),
+                       let rawImage = UIImage(data: data) {
+                        loadedImages.append(rawImage.fixOrientation())
+                    }
+                }
+                await MainActor.run {
+                    self.isLoadingPhotos = false
+                    guard !loadedImages.isEmpty else { return }
+
+                    if loadedImages.count == 1 && self.captureMode == .single && self.batchItems.isEmpty {
+                        withAnimation(.easeInOut) {
+                            self.capturedImage = loadedImages[0]
+                        }
+                        self.analyzeSingleImage(loadedImages[0])
+                    } else {
+                        // Multi-photo selection or batch mode
+                        for img in loadedImages {
+                            self.addBatchItem(image: img)
+                        }
+                        withAnimation(.easeInOut) {
+                            self.captureMode = .batch
+                            self.currentBatchIndex = 0
+                            self.isReviewingBatch = true
                         }
                     }
+                    self.selectedPhotoItems = []
                 }
             }
         }
@@ -284,7 +327,7 @@ public struct PackagePhotoCaptureView: View {
                     // Shutter Row
                     HStack(spacing: 0) {
                         // Left: Camera Roll PhotosPicker button
-                        PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                        PhotosPicker(selection: $selectedPhotoItems, matching: .images) {
                             ZStack {
                                 Circle()
                                     .fill(Color.black.opacity(0.65))
@@ -381,7 +424,7 @@ public struct PackagePhotoCaptureView: View {
                     Button(action: {
                         withAnimation {
                             self.capturedImage = nil
-                            self.selectedPhotoItem = nil
+                            self.selectedPhotoItems = []
                             self.detectedNumbers = []
                             if initialCleanNumber.isEmpty {
                                 self.selectedNumberString = ""
@@ -630,7 +673,7 @@ public struct PackagePhotoCaptureView: View {
                     Button(action: {
                         withAnimation {
                             self.capturedImage = nil
-                            self.selectedPhotoItem = nil
+                            self.selectedPhotoItems = []
                             self.detectedNumbers = []
                             if initialCleanNumber.isEmpty {
                                 self.selectedNumberString = ""
