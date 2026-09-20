@@ -22,8 +22,7 @@ def generate_icons():
         {"size": "60x60", "idiom": "iphone", "scale": "2x", "pixels": 120, "filename": "AppIcon-60@2x.png"},
         {"size": "60x60", "idiom": "iphone", "scale": "3x", "pixels": 180, "filename": "AppIcon-60@3x.png"},
         {"size": "76x76", "idiom": "ipad", "scale": "2x", "pixels": 152, "filename": "AppIcon-76@2x.png"},
-        {"size": "83.5x83.5", "idiom": "ipad", "scale": "2x", "pixels": 167, "filename": "AppIcon-83.5@2x.png"},
-        {"size": "1024x1024", "idiom": "ios-marketing", "scale": "1x", "pixels": 1024, "filename": "AppIcon-1024.png"}
+        {"size": "83.5x83.5", "idiom": "ipad", "scale": "2x", "pixels": 167, "filename": "AppIcon-83.5@2x.png"}
     ]
 
     images_json = []
