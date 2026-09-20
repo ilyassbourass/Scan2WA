@@ -102,6 +102,10 @@ public struct PackagesListView: View {
                         .background(Color(.darkGray).opacity(0.95))
                         .cornerRadius(20)
                         .padding(.bottom, 24)
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+
                 // Bottom Batch Action Bar
                 if isSelectionMode {
                     VStack {
