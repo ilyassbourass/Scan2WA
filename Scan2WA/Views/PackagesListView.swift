@@ -4,6 +4,7 @@ public struct PackagesListView: View {
     @ObservedObject private var packageManager = PackageManager.shared
     @AppStorage("defaultCountryPrefix") private var defaultCountryPrefix: String = "+212"
     @Environment(\.presentationMode) private var presentationMode
+    @EnvironmentObject private var navigationState: AppNavigationState
 
     @State private var searchQuery: String = ""
     @State private var selectedStatusFilter: DeliveryStatus? = nil // nil = "Tous"
@@ -12,6 +13,9 @@ public struct PackagesListView: View {
     @State private var packageToDelete: PackageModel? = nil
     @State private var showDeleteConfirmation: Bool = false
     @State private var showCopiedBanner: Bool = false
+    @State private var copiedBannerText: String = "Phone number copied to clipboard!"
+    @State private var showAddPackageSheet: Bool = false
+    @State private var showShortcutSheet: Bool = false
 
     @FocusState private var isSearchFocused: Bool
 
@@ -52,7 +56,7 @@ public struct PackagesListView: View {
                         HStack(spacing: 8) {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.green)
-                            Text("Phone number copied to clipboard!")
+                            Text(copiedBannerText)
                                 .font(.system(size: 13, weight: .bold))
                                 .foregroundColor(.white)
                         }
@@ -78,7 +82,23 @@ public struct PackagesListView: View {
                         .foregroundColor(.secondary)
                 }
 
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        showShortcutSheet = true
+                    }) {
+                        Image(systemName: "bolt.circle")
+                            .font(.system(size: 19))
+                            .foregroundColor(.orange)
+                    }
+
+                    Button(action: {
+                        showAddPackageSheet = true
+                    }) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 21, weight: .semibold))
+                            .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                    }
+
                     Button(action: {
                         presentationMode.wrappedValue.dismiss()
                     }) {
@@ -87,9 +107,34 @@ public struct PackagesListView: View {
                             .foregroundColor(.gray)
                     }
                 }
+
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        isSearchFocused = false
+                    }
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                }
             }
             .sheet(item: $packageToEdit) { pkg in
                 EditPackageSheet(package: pkg)
+            }
+            .sheet(isPresented: $showShortcutSheet) {
+                ShortcutGuideSheetView(onCopyURL: {
+                    UIPasteboard.general.string = "scan2wa://search"
+                    let haptic = UINotificationFeedbackGenerator()
+                    haptic.notificationOccurred(.success)
+                    copiedBannerText = "URL 'scan2wa://search' copiée !"
+                    withAnimation {
+                        showCopiedBanner = true
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+                        withAnimation {
+                            showCopiedBanner = false
+                        }
+                    }
+                })
             }
             .sheet(isPresented: Binding(
                 get: { selectedPhotoForPreview != nil },
@@ -100,6 +145,15 @@ public struct PackagesListView: View {
                         selectedPhotoForPreview = nil
                     }
                 }
+            }
+            .fullScreenCover(isPresented: $showAddPackageSheet) {
+                PackagePhotoCaptureView(
+                    phoneNumber: "",
+                    cleanNumber: "",
+                    onDismiss: {
+                        showAddPackageSheet = false
+                    }
+                )
             }
             .alert(isPresented: $showDeleteConfirmation) {
                 Alert(
@@ -112,6 +166,14 @@ public struct PackagesListView: View {
                     },
                     secondaryButton: .cancel()
                 )
+            }
+            .onAppear {
+                if navigationState.autoFocusSearch {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                        self.isSearchFocused = true
+                        navigationState.autoFocusSearch = false
+                    }
+                }
             }
         }
     }
@@ -432,7 +494,7 @@ public struct PackagesListView: View {
 
     // MARK: - Empty State View
     private var emptyStateView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 18) {
             Spacer()
             Image(systemName: "shippingbox.fill")
                 .font(.system(size: 56))
@@ -443,11 +505,28 @@ public struct PackagesListView: View {
                     .font(.system(size: 18, weight: .bold))
                     .foregroundColor(.white)
 
-                Text("Scan a phone number on a package label, tap the number, then select 'Save Package & Take Photo' to save it here.")
+                Text("Scan a phone number on a package label, or tap below to capture or select a photo from your gallery.")
                     .font(.system(size: 14))
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
+
+                Button(action: {
+                    showAddPackageSheet = true
+                }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 16, weight: .bold))
+                        Text("Ajouter un Colis")
+                            .font(.system(size: 15, weight: .bold))
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 12)
+                    .background(Color(red: 0.15, green: 0.78, blue: 0.35))
+                    .foregroundColor(.black)
+                    .cornerRadius(22)
+                }
+                .padding(.top, 6)
             } else {
                 Text("No matching packages")
                     .font(.system(size: 17, weight: .bold))
@@ -685,3 +764,131 @@ fileprivate struct PhotoPreviewModal: View {
         }
     }
 }
+
+// MARK: - Shortcut & Quick Actions Guide Sheet
+fileprivate struct ShortcutGuideSheetView: View {
+    let onCopyURL: () -> Void
+    @Environment(\.presentationMode) private var presentationMode
+
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        // Header
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Accès Rapide & Raccourcis")
+                                .font(.system(size: 20, weight: .black))
+                                .foregroundColor(.white)
+                            Text("Accédez instantanément à la recherche et à l'ajout de colis en 1 seul geste.")
+                                .font(.system(size: 14))
+                                .foregroundColor(.secondary)
+                        }
+
+                        // Method 1: 3D Touch / Long-press on Home Screen Icon
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "hand.tap.fill")
+                                    .foregroundColor(.orange)
+                                    .font(.system(size: 16, weight: .bold))
+                                Text("1. Appui Long sur l'icône (Écran d'accueil)")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
+
+                            Text("Sur votre écran d'accueil iPhone, maintenez le doigt appuyé sur l'icône Scan2WA pour afficher le menu rapide :")
+                                .font(.system(size: 13))
+                                .foregroundColor(.white.opacity(0.85))
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "magnifyingglass")
+                                        .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                                    Text("🔍 Rechercher un Colis (ouvre la recherche directement)")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(.white)
+                                }
+                                HStack(spacing: 10) {
+                                    Image(systemName: "plus.circle")
+                                        .foregroundColor(.cyan)
+                                    Text("📦 Ajouter un Colis (ouvre l'appareil photo)")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(.white)
+                                }
+                            }
+                            .padding(12)
+                            .background(Color.white.opacity(0.07))
+                            .cornerRadius(10)
+                        }
+                        .padding(16)
+                        .background(Color.white.opacity(0.06))
+                        .cornerRadius(16)
+
+                        // Method 2: iOS Shortcuts App Deep Link
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "bolt.fill")
+                                    .foregroundColor(.yellow)
+                                    .font(.system(size: 16, weight: .bold))
+                                Text("2. Raccourci iOS personnalisé")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
+
+                            Text("Vous pouvez créer un widget ou une icône 1-clic avec l'app Raccourcis d'Apple :")
+                                .font(.system(size: 13))
+                                .foregroundColor(.white.opacity(0.85))
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("1. Ouvrez l'application **Raccourcis** sur iPhone.")
+                                Text("2. Touchez **+** pour créer un raccourci.")
+                                Text("3. Ajoutez l'action **Ouvrir l'URL** (Open URL).")
+                                Text("4. Collez : **scan2wa://search**")
+                                Text("5. Touchez **Sur l'écran d'accueil**.")
+                            }
+                            .font(.system(size: 13))
+                            .foregroundColor(.secondary)
+
+                            Button(action: {
+                                onCopyURL()
+                                presentationMode.wrappedValue.dismiss()
+                            }) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "doc.on.doc.fill")
+                                    Text("Copier l'URL scan2wa://search")
+                                }
+                                .font(.system(size: 14, weight: .bold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color(red: 0.15, green: 0.78, blue: 0.35))
+                                .foregroundColor(.black)
+                                .cornerRadius(12)
+                            }
+                            .padding(.top, 4)
+                        }
+                        .padding(16)
+                        .background(Color.white.opacity(0.06))
+                        .cornerRadius(16)
+
+                        Spacer()
+                    }
+                    .padding(20)
+                }
+            }
+            .navigationTitle("Raccourcis")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Fermer") {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                    .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                    .font(.headline)
+                }
+            }
+        }
+    }
+}
+

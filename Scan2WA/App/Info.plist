@@ -17,13 +17,47 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.9.2</string>
+	<string>1.10.0</string>
 	<key>CFBundleVersion</key>
-	<string>192</string>
+	<string>1100</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera access is required to scan phone numbers in real-time.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Photo library access is required to select package photos from your camera roll.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.ilyassbourass.Scan2WA</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>scan2wa</string>
+			</array>
+		</dict>
+	</array>
+	<key>UIApplicationShortcutItems</key>
+	<array>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>com.ilyassbourass.Scan2WA.search</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Search Packages</string>
+			<key>UIApplicationShortcutItemIconType</key>
+			<string>UIApplicationShortcutIconTypeSearch</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>com.ilyassbourass.Scan2WA.addPackage</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Add Package</string>
+			<key>UIApplicationShortcutItemIconType</key>
+			<string>UIApplicationShortcutIconTypeAdd</string>
+		</dict>
+	</array>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>whatsapp-smb</string>

@@ -2,6 +2,7 @@ import SwiftUI
 import AVFoundation
 
 public struct MainScannerView: View {
+    @EnvironmentObject private var navigationState: AppNavigationState
     @StateObject private var cameraManager = CameraManager()
     @ObservedObject private var packageManager = PackageManager.shared
     @AppStorage("defaultCountryPrefix") private var defaultCountryPrefix: String = "+212"
@@ -328,27 +329,41 @@ public struct MainScannerView: View {
         .onChange(of: showSettings) { isShowing in
             if isShowing {
                 cameraManager.pauseSession()
-            } else if !showPackagesList && !showPackageCapture {
+            } else if !showPackagesList && !navigationState.showPackagesList && !showPackageCapture && !navigationState.showDirectAddPackage {
                 cameraManager.resumeSession()
             }
         }
         .onChange(of: showPackagesList) { isShowing in
             if isShowing {
                 cameraManager.pauseSession()
-            } else if !showSettings && !showPackageCapture {
+            } else if !showSettings && !navigationState.showPackagesList && !showPackageCapture && !navigationState.showDirectAddPackage {
+                cameraManager.resumeSession()
+            }
+        }
+        .onChange(of: navigationState.showPackagesList) { isShowing in
+            if isShowing {
+                cameraManager.pauseSession()
+            } else if !showSettings && !showPackagesList && !showPackageCapture && !navigationState.showDirectAddPackage {
                 cameraManager.resumeSession()
             }
         }
         .onChange(of: showPackageCapture) { isShowing in
             if isShowing {
                 cameraManager.pauseSession()
-            } else if !showSettings && !showPackagesList {
+            } else if !showSettings && !showPackagesList && !navigationState.showPackagesList && !navigationState.showDirectAddPackage {
+                cameraManager.resumeSession()
+            }
+        }
+        .onChange(of: navigationState.showDirectAddPackage) { isShowing in
+            if isShowing {
+                cameraManager.pauseSession()
+            } else if !showSettings && !showPackagesList && !navigationState.showPackagesList && !showPackageCapture {
                 cameraManager.resumeSession()
             }
         }
         .onChange(of: scenePhase) { phase in
             if phase == .active {
-                if !showSettings && !showPackagesList && !showPackageCapture {
+                if !showSettings && !showPackagesList && !navigationState.showPackagesList && !showPackageCapture && !navigationState.showDirectAddPackage {
                     cameraManager.resumeSession()
                 }
             } else {
@@ -358,23 +373,41 @@ public struct MainScannerView: View {
         .sheet(isPresented: $showSettings) {
             SettingsSheetView(defaultCountryPrefix: $defaultCountryPrefix)
         }
-        .sheet(isPresented: $showPackagesList) {
-            PackagesListView()
-        }
-        .fullScreenCover(isPresented: $showPackageCapture) {
-            if let num = packageNumberToCapture {
-                PackagePhotoCaptureView(
-                    phoneNumber: num,
-                    cleanNumber: num,
-                    onDismiss: {
-                        showPackageCapture = false
-                        packageNumberToCapture = nil
-                    },
-                    onSaved: { _ in
-                        cameraManager.resetScan()
-                    }
-                )
+        .sheet(isPresented: Binding(
+            get: { showPackagesList || navigationState.showPackagesList },
+            set: { isShowing in
+                showPackagesList = isShowing
+                navigationState.showPackagesList = isShowing
+                if !isShowing {
+                    navigationState.autoFocusSearch = false
+                }
             }
+        )) {
+            PackagesListView()
+                .environmentObject(navigationState)
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { showPackageCapture || navigationState.showDirectAddPackage },
+            set: { isShowing in
+                showPackageCapture = isShowing
+                navigationState.showDirectAddPackage = isShowing
+                if !isShowing {
+                    packageNumberToCapture = nil
+                }
+            }
+        )) {
+            PackagePhotoCaptureView(
+                phoneNumber: packageNumberToCapture ?? "",
+                cleanNumber: packageNumberToCapture ?? "",
+                onDismiss: {
+                    showPackageCapture = false
+                    navigationState.showDirectAddPackage = false
+                    packageNumberToCapture = nil
+                },
+                onSaved: { _ in
+                    cameraManager.resetScan()
+                }
+            )
         }
     }
 }

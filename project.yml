@@ -14,12 +14,13 @@ targets:
       path: Scan2WA/App/Info.plist
       properties:
         CFBundleDisplayName: "Scan2WA"
-        CFBundleShortVersionString: "1.9.2"
-        CFBundleVersion: "192"
+        CFBundleShortVersionString: "1.10.0"
+        CFBundleVersion: "1100"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSCameraUsageDescription: "Camera access is needed to scan and recognize phone numbers in real-time."
+        NSPhotoLibraryUsageDescription: "Photo library access is required to select package photos from your camera roll."
         LSApplicationQueriesSchemes:
           - whatsapp-smb
           - whatsappsmb
