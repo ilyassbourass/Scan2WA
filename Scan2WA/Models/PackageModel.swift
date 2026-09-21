@@ -50,6 +50,8 @@ public struct PackageModel: Identifiable, Codable, Equatable {
     public var notes: String?
     public var createdAt: Date
     public var status: DeliveryStatus
+    public var isTrashed: Bool
+    public var trashedAt: Date?
 
     public init(
         id: UUID = UUID(),
@@ -59,7 +61,9 @@ public struct PackageModel: Identifiable, Codable, Equatable {
         locationLink: String? = nil,
         notes: String? = nil,
         createdAt: Date = Date(),
-        status: DeliveryStatus = .livre
+        status: DeliveryStatus = .livre,
+        isTrashed: Bool = false,
+        trashedAt: Date? = nil
     ) {
         self.id = id
         self.phoneNumber = phoneNumber
@@ -69,11 +73,13 @@ public struct PackageModel: Identifiable, Codable, Equatable {
         self.notes = notes
         self.createdAt = createdAt
         self.status = status
+        self.isTrashed = isTrashed
+        self.trashedAt = trashedAt
     }
 
-    // Custom decoding for backward compatibility with v1.8.0
+    // Custom decoding for backward compatibility with v1.8.0+
     private enum CodingKeys: String, CodingKey {
-        case id, phoneNumber, cleanNumber, photoFileName, locationLink, notes, createdAt, status, isDelivered
+        case id, phoneNumber, cleanNumber, photoFileName, locationLink, notes, createdAt, status, isDelivered, isTrashed, trashedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -93,6 +99,9 @@ public struct PackageModel: Identifiable, Codable, Equatable {
         } else {
             status = .livre
         }
+
+        isTrashed = try container.decodeIfPresent(Bool.self, forKey: .isTrashed) ?? false
+        trashedAt = try container.decodeIfPresent(Date.self, forKey: .trashedAt)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -105,6 +114,8 @@ public struct PackageModel: Identifiable, Codable, Equatable {
         try container.encodeIfPresent(notes, forKey: .notes)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(status, forKey: .status)
+        try container.encode(isTrashed, forKey: .isTrashed)
+        try container.encodeIfPresent(trashedAt, forKey: .trashedAt)
     }
 
     /// Extracts the last 2 digits of the phone number for quick courier indexing (e.g. "73")

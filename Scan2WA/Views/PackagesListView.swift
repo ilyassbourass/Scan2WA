@@ -16,6 +16,8 @@ public struct PackagesListView: View {
     @State private var copiedBannerText: String = "Phone number copied to clipboard!"
     @State private var showAddPackageSheet: Bool = false
     @State private var showShortcutSheet: Bool = false
+    @State private var showTrashSheet: Bool = false
+    @State private var undoTrashedIDs: Set<UUID> = []
     @State private var isSelectionMode: Bool = false
     @State private var selectedPackageIDs: Set<UUID> = []
     @State private var showBatchDeleteAlert: Bool = false
@@ -29,7 +31,7 @@ public struct PackagesListView: View {
     }
 
     private func countFor(status: DeliveryStatus) -> Int {
-        packageManager.packages.filter { $0.status == status }.count
+        packageManager.activeCount(for: status)
     }
 
     public var body: some View {
@@ -90,12 +92,30 @@ public struct PackagesListView: View {
                 if showCopiedBanner {
                     VStack {
                         Spacer()
-                        HStack(spacing: 8) {
+                        HStack(spacing: 10) {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.green)
                             Text(copiedBannerText)
                                 .font(.system(size: 13, weight: .bold))
                                 .foregroundColor(.white)
+
+                            if !undoTrashedIDs.isEmpty {
+                                Button(action: {
+                                    packageManager.batchRestoreFromTrash(ids: undoTrashedIDs)
+                                    undoTrashedIDs.removeAll()
+                                    withAnimation { showCopiedBanner = false }
+                                    let haptic = UINotificationFeedbackGenerator()
+                                    haptic.notificationOccurred(.success)
+                                }) {
+                                    Text("UNDO")
+                                        .font(.system(size: 12, weight: .heavy))
+                                        .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.white.opacity(0.15))
+                                        .cornerRadius(6)
+                                }
+                            }
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
@@ -252,6 +272,28 @@ public struct PackagesListView: View {
                                 .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
                         }
 
+                        // Trash Button with live count badge
+                        Button(action: {
+                            showTrashSheet = true
+                        }) {
+                            ZStack(alignment: .topTrailing) {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 19))
+                                    .foregroundColor(packageManager.trashedPackages.isEmpty ? .gray : .red.opacity(0.9))
+
+                                if !packageManager.trashedPackages.isEmpty {
+                                    Text("\(packageManager.trashedPackages.count)")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 4)
+                                        .padding(.vertical, 1)
+                                        .background(Color.red)
+                                        .clipShape(Capsule())
+                                        .offset(x: 8, y: -6)
+                                }
+                            }
+                        }
+
                         Button(action: {
                             presentationMode.wrappedValue.dismiss()
                         }) {
@@ -273,6 +315,9 @@ public struct PackagesListView: View {
             }
             .sheet(item: $packageToEdit) { pkg in
                 EditPackageSheet(package: pkg)
+            }
+            .sheet(isPresented: $showTrashSheet) {
+                TrashView()
             }
             .sheet(isPresented: $showShortcutSheet) {
                 ShortcutGuideSheetView(onCopyURL: {
@@ -311,11 +356,19 @@ public struct PackagesListView: View {
             }
             .alert(isPresented: $showDeleteConfirmation) {
                 Alert(
-                    title: Text("Delete Package?"),
-                    message: Text("Are you sure you want to delete the package for \(packageToDelete?.cleanNumber ?? "")? This will also remove the photo."),
-                    primaryButton: .destructive(Text("Delete")) {
+                    title: Text("Move to Trash?"),
+                    message: Text("This package for \(packageToDelete?.cleanNumber ?? "") will be moved to Trash. You can restore it anytime within 30 days."),
+                    primaryButton: .destructive(Text("Move to Trash")) {
                         if let id = packageToDelete?.id {
-                            packageManager.deletePackage(id: id)
+                            packageManager.moveToTrash(id: id)
+                            undoTrashedIDs = [id]
+                            let haptic = UINotificationFeedbackGenerator()
+                            haptic.notificationOccurred(.success)
+                            copiedBannerText = "Package moved to Trash"
+                            withAnimation { showCopiedBanner = true }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+                                withAnimation { showCopiedBanner = false }
+                            }
                         }
                     },
                     secondaryButton: .cancel()
@@ -323,18 +376,20 @@ public struct PackagesListView: View {
             }
             .alert(isPresented: $showBatchDeleteAlert) {
                 Alert(
-                    title: Text("Delete \(selectedPackageIDs.count) Packages?"),
-                    message: Text("Are you sure you want to permanently delete the \(selectedPackageIDs.count) selected package\(selectedPackageIDs.count == 1 ? "" : "s") and their photos? This action cannot be undone."),
-                    primaryButton: .destructive(Text("Delete All")) {
+                    title: Text("Move \(selectedPackageIDs.count) Packages to Trash?"),
+                    message: Text("Are you sure you want to move the \(selectedPackageIDs.count) selected package\(selectedPackageIDs.count == 1 ? "" : "s") to Trash? You can restore them anytime within 30 days."),
+                    primaryButton: .destructive(Text("Move to Trash")) {
                         let count = selectedPackageIDs.count
-                        packageManager.batchDeletePackages(ids: selectedPackageIDs)
+                        let idsToTrash = selectedPackageIDs
+                        packageManager.batchMoveToTrash(ids: idsToTrash)
                         selectedPackageIDs.removeAll()
                         isSelectionMode = false
+                        undoTrashedIDs = idsToTrash
                         let haptic = UINotificationFeedbackGenerator()
                         haptic.notificationOccurred(.success)
-                        copiedBannerText = "Deleted \(count) package\(count == 1 ? "" : "s")!"
+                        copiedBannerText = "Moved \(count) package\(count == 1 ? "" : "s") to Trash"
                         withAnimation { showCopiedBanner = true }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
                             withAnimation { showCopiedBanner = false }
                         }
                     },
@@ -571,26 +626,40 @@ public struct PackagesListView: View {
                             }
                         }
 
-                        // Status pill with 1-tap quick status switcher
-                        if !isSelectionMode {
-                            Menu {
-                                ForEach(DeliveryStatus.allCases) { st in
-                                    Button(action: {
-                                        packageManager.updateStatus(id: pkg.id, status: st)
-                                        let haptic = UIImpactFeedbackGenerator(style: .medium)
-                                        haptic.impactOccurred()
-                                    }) {
-                                        Label(st.rawValue, systemImage: st.iconName)
+                        HStack(spacing: 8) {
+                            // Status pill with 1-tap quick status switcher
+                            if !isSelectionMode {
+                                Menu {
+                                    ForEach(DeliveryStatus.allCases) { st in
+                                        Button(action: {
+                                            packageManager.updateStatus(id: pkg.id, status: st)
+                                            let haptic = UIImpactFeedbackGenerator(style: .medium)
+                                            haptic.impactOccurred()
+                                        }) {
+                                            Label(st.rawValue, systemImage: st.iconName)
+                                        }
                                     }
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: pkg.status.iconName)
+                                            .font(.system(size: 11, weight: .bold))
+                                        Text(pkg.status.rawValue)
+                                            .font(.system(size: 12, weight: .bold))
+                                        Image(systemName: "chevron.down")
+                                            .font(.system(size: 9, weight: .bold))
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(pkg.status.backgroundColor)
+                                    .foregroundColor(pkg.status.color)
+                                    .cornerRadius(8)
                                 }
-                            } label: {
+                            } else {
                                 HStack(spacing: 4) {
                                     Image(systemName: pkg.status.iconName)
                                         .font(.system(size: 11, weight: .bold))
                                     Text(pkg.status.rawValue)
                                         .font(.system(size: 12, weight: .bold))
-                                    Image(systemName: "chevron.down")
-                                        .font(.system(size: 9, weight: .bold))
                                 }
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 3)
@@ -598,18 +667,22 @@ public struct PackagesListView: View {
                                 .foregroundColor(pkg.status.color)
                                 .cornerRadius(8)
                             }
-                        } else {
-                            HStack(spacing: 4) {
-                                Image(systemName: pkg.status.iconName)
-                                    .font(.system(size: 11, weight: .bold))
-                                Text(pkg.status.rawValue)
-                                    .font(.system(size: 12, weight: .bold))
+
+                            // Duplicate count badge (if > 1 package for this number)
+                            let activeCount = packageManager.activePackageCount(for: pkg.cleanNumber)
+                            if activeCount > 1 {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "square.stack.3d.up.fill")
+                                        .font(.system(size: 9))
+                                    Text("\(activeCount)x")
+                                        .font(.system(size: 11, weight: .bold))
+                                }
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .background(Color.orange.opacity(0.18))
+                                .foregroundColor(.orange)
+                                .cornerRadius(8)
                             }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(pkg.status.backgroundColor)
-                            .foregroundColor(pkg.status.color)
-                            .cornerRadius(8)
                         }
 
                         // Notes (if any)

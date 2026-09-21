@@ -73,6 +73,11 @@ public struct PackagePhotoCaptureView: View {
     @State private var currentBatchIndex: Int = 0
     @State private var showShutterFlash: Bool = false
 
+    // Duplicate Warning States
+    @State private var showDuplicateWarning: Bool = false
+    @State private var duplicateExistingPackage: PackageModel? = nil
+    @State private var isDuplicateBatchItem: Bool = false
+
     @FocusState private var isInputFocused: Bool
 
     public init(
@@ -192,6 +197,36 @@ public struct PackagePhotoCaptureView: View {
                     }
                     self.selectedPhotoItems = []
                 }
+            }
+        }
+        .sheet(isPresented: $showDuplicateWarning) {
+            if let duplicate = duplicateExistingPackage {
+                DuplicateWarningSheet(
+                    existingPackage: duplicate,
+                    newNumber: isDuplicateBatchItem ? (currentBatchIndex < batchItems.count ? batchItems[currentBatchIndex].selectedNumberString : "") : selectedNumberString,
+                    newImage: isDuplicateBatchItem ? (currentBatchIndex < batchItems.count ? batchItems[currentBatchIndex].image : nil) : capturedImage,
+                    onSaveAnyway: {
+                        showDuplicateWarning = false
+                        if isDuplicateBatchItem {
+                            executeSaveCurrentBatchPackageAction()
+                        } else {
+                            executeSaveSinglePackageAction()
+                        }
+                    },
+                    onDelete: {
+                        showDuplicateWarning = false
+                        if isDuplicateBatchItem {
+                            deleteCurrentBatchItem()
+                        } else {
+                            capturedImage = nil
+                            selectedNumberString = ""
+                            onDismiss()
+                        }
+                    },
+                    onCancel: {
+                        showDuplicateWarning = false
+                    }
+                )
             }
         }
     }
@@ -1048,6 +1083,25 @@ public struct PackagePhotoCaptureView: View {
         let clean = item.selectedNumberString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
 
+        // Duplicate check in active packages
+        if let duplicate = PackageManager.shared.findDuplicate(for: clean) {
+            self.duplicateExistingPackage = duplicate
+            self.isDuplicateBatchItem = true
+            self.showDuplicateWarning = true
+            let haptic = UINotificationFeedbackGenerator()
+            haptic.notificationOccurred(.warning)
+            return
+        }
+
+        executeSaveCurrentBatchPackageAction()
+    }
+
+    private func executeSaveCurrentBatchPackageAction() {
+        guard currentBatchIndex < batchItems.count else { return }
+        let item = batchItems[currentBatchIndex]
+        let clean = item.selectedNumberString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+
         _ = PackageManager.shared.savePackage(
             phoneNumber: clean,
             cleanNumber: clean,
@@ -1080,6 +1134,23 @@ public struct PackagePhotoCaptureView: View {
     }
 
     private func saveSinglePackageAction() {
+        let clean = selectedNumberString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let image = capturedImage, !clean.isEmpty else { return }
+
+        // Duplicate check in active packages
+        if let duplicate = PackageManager.shared.findDuplicate(for: clean) {
+            self.duplicateExistingPackage = duplicate
+            self.isDuplicateBatchItem = false
+            self.showDuplicateWarning = true
+            let haptic = UINotificationFeedbackGenerator()
+            haptic.notificationOccurred(.warning)
+            return
+        }
+
+        executeSaveSinglePackageAction()
+    }
+
+    private func executeSaveSinglePackageAction() {
         let clean = selectedNumberString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let image = capturedImage, !clean.isEmpty else { return }
         isSaving = true

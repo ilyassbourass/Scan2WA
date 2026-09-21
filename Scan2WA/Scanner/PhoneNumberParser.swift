@@ -190,4 +190,17 @@ public final class PhoneNumberParser {
         let waDigits = prepareForWhatsApp(cleanNumber: cleanNumber, defaultCountryPrefix: defaultCountryPrefix)
         return "+\(waDigits)"
     }
+
+    /// Normalizes phone number digits for duplicate checking (strips country prefix like +212 / 212 / 00212 and local leading 0)
+    public static func normalizeForComparison(_ number: String) -> String {
+        var digits = number.filter { $0.isNumber }
+        if digits.hasPrefix("00212") {
+            digits = String(digits.dropFirst(5))
+        } else if digits.hasPrefix("212") && digits.count == 12 {
+            digits = String(digits.dropFirst(3))
+        } else if digits.hasPrefix("0") && digits.count == 10 {
+            digits = String(digits.dropFirst(1))
+        }
+        return digits
+    }
 }

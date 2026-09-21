@@ -47,6 +47,7 @@ public final class PackageManager: ObservableObject {
             let decoded = try JSONDecoder().decode([PackageModel].self, from: data)
             DispatchQueue.main.async {
                 self.packages = decoded
+                self.autoPurgeOldTrash()
             }
         } catch {
             print("Error loading packages: \(error)")
@@ -139,8 +140,53 @@ public final class PackageManager: ObservableObject {
         persistPackages()
     }
 
-    /// Deletes a package and cleans up its photo from storage
-    public func deletePackage(id: UUID) {
+    // MARK: - Trash Management (Soft-Delete & Restore)
+
+    /// Moves a package to Trash (keeps photo file, marks as trashed)
+    public func moveToTrash(id: UUID) {
+        if let index = packages.firstIndex(where: { $0.id == id }) {
+            packages[index].isTrashed = true
+            packages[index].trashedAt = Date()
+            persistPackages()
+        }
+    }
+
+    /// Batch moves packages to Trash
+    public func batchMoveToTrash(ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        let now = Date()
+        for index in packages.indices {
+            if ids.contains(packages[index].id) {
+                packages[index].isTrashed = true
+                packages[index].trashedAt = now
+            }
+        }
+        persistPackages()
+    }
+
+    /// Restores a package from Trash back to active packages
+    public func restoreFromTrash(id: UUID) {
+        if let index = packages.firstIndex(where: { $0.id == id }) {
+            packages[index].isTrashed = false
+            packages[index].trashedAt = nil
+            persistPackages()
+        }
+    }
+
+    /// Batch restores packages from Trash
+    public func batchRestoreFromTrash(ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        for index in packages.indices {
+            if ids.contains(packages[index].id) {
+                packages[index].isTrashed = false
+                packages[index].trashedAt = nil
+            }
+        }
+        persistPackages()
+    }
+
+    /// Permanently deletes a package from Trash and removes photo from disk
+    public func permanentlyDelete(id: UUID) {
         if let index = packages.firstIndex(where: { $0.id == id }) {
             let package = packages[index]
             photoCache.removeObject(forKey: package.photoFileName as NSString)
@@ -151,8 +197,8 @@ public final class PackageManager: ObservableObject {
         }
     }
 
-    /// Batch deletes multiple packages and cleans up their photos from storage
-    public func batchDeletePackages(ids: Set<UUID>) {
+    /// Batch permanently deletes packages from Trash and removes their photos from disk
+    public func batchPermanentlyDelete(ids: Set<UUID>) {
         guard !ids.isEmpty else { return }
         for pkg in packages where ids.contains(pkg.id) {
             photoCache.removeObject(forKey: pkg.photoFileName as NSString)
@@ -161,6 +207,88 @@ public final class PackageManager: ObservableObject {
         }
         packages.removeAll(where: { ids.contains($0.id) })
         persistPackages()
+    }
+
+    /// Empties the entire Trash, permanently removing all trashed packages and their photos
+    public func emptyTrash() {
+        let trashed = packages.filter { $0.isTrashed }
+        for pkg in trashed {
+            photoCache.removeObject(forKey: pkg.photoFileName as NSString)
+            let photoURL = photosDirectoryURL.appendingPathComponent(pkg.photoFileName)
+            try? fileManager.removeItem(at: photoURL)
+        }
+        packages.removeAll(where: { $0.isTrashed })
+        persistPackages()
+    }
+
+    /// Automatically purges trashed packages older than 30 days
+    public func autoPurgeOldTrash(olderThanDays: Int = 30) {
+        guard let threshold = Calendar.current.date(byAdding: .day, value: -olderThanDays, to: Date()) else { return }
+        let oldTrashed = packages.filter { $0.isTrashed && ($0.trashedAt ?? .distantPast) < threshold }
+        guard !oldTrashed.isEmpty else { return }
+
+        for pkg in oldTrashed {
+            photoCache.removeObject(forKey: pkg.photoFileName as NSString)
+            let photoURL = photosDirectoryURL.appendingPathComponent(pkg.photoFileName)
+            try? fileManager.removeItem(at: photoURL)
+        }
+        packages.removeAll(where: { pkg in
+            pkg.isTrashed && (pkg.trashedAt ?? .distantPast) < threshold
+        })
+        persistPackages()
+    }
+
+    /// Legacy delete aliases (safely routes to soft-delete moveToTrash)
+    public func deletePackage(id: UUID) {
+        moveToTrash(id: id)
+    }
+
+    public func batchDeletePackages(ids: Set<UUID>) {
+        batchMoveToTrash(ids: ids)
+    }
+
+    // MARK: - Duplicate Detection
+
+    /// Finds any existing active (non-trashed) package with the same phone number
+    public func findDuplicate(for phoneNumber: String, excludingId: UUID? = nil) -> PackageModel? {
+        let targetNorm = PhoneNumberParser.normalizeForComparison(phoneNumber)
+        guard !targetNorm.isEmpty else { return nil }
+
+        return packages.first { pkg in
+            guard !pkg.isTrashed else { return false }
+            if let excl = excludingId, pkg.id == excl { return false }
+            let pkgNorm = PhoneNumberParser.normalizeForComparison(pkg.cleanNumber)
+            return pkgNorm == targetNorm || pkg.cleanNumber == phoneNumber
+        }
+    }
+
+    /// Returns count of active packages with this phone number (for showing e.g. "2x Packages" badge)
+    public func activePackageCount(for phoneNumber: String) -> Int {
+        let targetNorm = PhoneNumberParser.normalizeForComparison(phoneNumber)
+        guard !targetNorm.isEmpty else { return 0 }
+
+        return packages.filter { pkg in
+            guard !pkg.isTrashed else { return false }
+            let pkgNorm = PhoneNumberParser.normalizeForComparison(pkg.cleanNumber)
+            return pkgNorm == targetNorm || pkg.cleanNumber == phoneNumber
+        }.count
+    }
+
+    // MARK: - Collections & Queries
+
+    /// Active (non-trashed) packages
+    public var activePackages: [PackageModel] {
+        packages.filter { !$0.isTrashed }
+    }
+
+    /// Trashed packages sorted newest deletion first
+    public var trashedPackages: [PackageModel] {
+        packages.filter { $0.isTrashed }.sorted { ($0.trashedAt ?? $0.createdAt) > ($1.trashedAt ?? $1.createdAt) }
+    }
+
+    /// Count for a specific delivery status among active packages
+    public func activeCount(for status: DeliveryStatus) -> Int {
+        packages.filter { !$0.isTrashed && $0.status == status }.count
     }
 
     /// Loads the photo for a package from cache or disk
@@ -177,9 +305,9 @@ public final class PackageManager: ObservableObject {
         return nil
     }
 
-    /// Returns packages filtered by search query and optional status tab
+    /// Returns active packages filtered by search query and optional status tab
     public func filteredPackages(query: String, statusFilter: DeliveryStatus? = nil) -> [PackageModel] {
-        var result = packages
+        var result = packages.filter { !$0.isTrashed }
 
         if let status = statusFilter {
             result = result.filter { $0.status == status }
