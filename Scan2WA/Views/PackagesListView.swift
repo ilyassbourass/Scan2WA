@@ -986,12 +986,6 @@ fileprivate struct EditPackageSheet: View {
                         let trimmed = phoneNumberText.trimmingCharacters(in: .whitespacesAndNewlines)
                         if !trimmed.isEmpty {
                             package.cleanNumber = trimmed
-                            let digits = trimmed.filter { $0.isNumber }
-                            if digits.count >= 2 {
-                                package.lastTwoDigits = String(digits.suffix(2))
-                            } else {
-                                package.lastTwoDigits = digits.isEmpty ? "--" : digits
-                            }
                             package.phoneNumber = PhoneNumberParser.shared.prepareForWhatsApp(
                                 cleanNumber: trimmed,
                                 defaultCountryPrefix: defaultCountryPrefix
