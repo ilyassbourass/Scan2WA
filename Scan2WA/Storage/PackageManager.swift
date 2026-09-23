@@ -123,102 +123,138 @@ public final class PackageManager: ObservableObject {
 
     /// Quickly updates the delivery status of a package
     public func updateStatus(id: UUID, status: DeliveryStatus) {
-        if let index = packages.firstIndex(where: { $0.id == id }) {
-            packages[index].status = status
-            persistPackages()
+        let action = {
+            if let index = self.packages.firstIndex(where: { $0.id == id }) {
+                self.objectWillChange.send()
+                self.packages[index].status = status
+                self.persistPackages()
+            }
         }
+        if Thread.isMainThread { action() } else { DispatchQueue.main.async(execute: action) }
     }
 
     /// Batch updates the delivery status of multiple packages
     public func batchUpdateStatus(ids: Set<UUID>, status: DeliveryStatus) {
         guard !ids.isEmpty else { return }
-        for index in packages.indices {
-            if ids.contains(packages[index].id) {
-                packages[index].status = status
+        let action = {
+            self.objectWillChange.send()
+            for index in self.packages.indices {
+                if ids.contains(self.packages[index].id) {
+                    self.packages[index].status = status
+                }
             }
+            self.persistPackages()
         }
-        persistPackages()
+        if Thread.isMainThread { action() } else { DispatchQueue.main.async(execute: action) }
     }
 
     // MARK: - Trash Management (Soft-Delete & Restore)
 
     /// Moves a package to Trash (keeps photo file, marks as trashed)
     public func moveToTrash(id: UUID) {
-        if let index = packages.firstIndex(where: { $0.id == id }) {
-            packages[index].isTrashed = true
-            packages[index].trashedAt = Date()
-            persistPackages()
+        let action = {
+            if let index = self.packages.firstIndex(where: { $0.id == id }) {
+                self.objectWillChange.send()
+                self.packages[index].isTrashed = true
+                self.packages[index].trashedAt = Date()
+                self.persistPackages()
+            }
         }
+        if Thread.isMainThread { action() } else { DispatchQueue.main.async(execute: action) }
     }
 
     /// Batch moves packages to Trash
     public func batchMoveToTrash(ids: Set<UUID>) {
         guard !ids.isEmpty else { return }
         let now = Date()
-        for index in packages.indices {
-            if ids.contains(packages[index].id) {
-                packages[index].isTrashed = true
-                packages[index].trashedAt = now
+        let action = {
+            self.objectWillChange.send()
+            for index in self.packages.indices {
+                if ids.contains(self.packages[index].id) {
+                    self.packages[index].isTrashed = true
+                    self.packages[index].trashedAt = now
+                }
             }
+            self.persistPackages()
         }
-        persistPackages()
+        if Thread.isMainThread { action() } else { DispatchQueue.main.async(execute: action) }
     }
 
     /// Restores a package from Trash back to active packages
     public func restoreFromTrash(id: UUID) {
-        if let index = packages.firstIndex(where: { $0.id == id }) {
-            packages[index].isTrashed = false
-            packages[index].trashedAt = nil
-            persistPackages()
+        let action = {
+            if let index = self.packages.firstIndex(where: { $0.id == id }) {
+                self.objectWillChange.send()
+                self.packages[index].isTrashed = false
+                self.packages[index].trashedAt = nil
+                self.persistPackages()
+            }
         }
+        if Thread.isMainThread { action() } else { DispatchQueue.main.async(execute: action) }
     }
 
     /// Batch restores packages from Trash
     public func batchRestoreFromTrash(ids: Set<UUID>) {
         guard !ids.isEmpty else { return }
-        for index in packages.indices {
-            if ids.contains(packages[index].id) {
-                packages[index].isTrashed = false
-                packages[index].trashedAt = nil
+        let action = {
+            self.objectWillChange.send()
+            for index in self.packages.indices {
+                if ids.contains(self.packages[index].id) {
+                    self.packages[index].isTrashed = false
+                    self.packages[index].trashedAt = nil
+                }
             }
+            self.persistPackages()
         }
-        persistPackages()
+        if Thread.isMainThread { action() } else { DispatchQueue.main.async(execute: action) }
     }
 
     /// Permanently deletes a package from Trash and removes photo from disk
     public func permanentlyDelete(id: UUID) {
-        if let index = packages.firstIndex(where: { $0.id == id }) {
-            let package = packages[index]
-            photoCache.removeObject(forKey: package.photoFileName as NSString)
-            let photoURL = photosDirectoryURL.appendingPathComponent(package.photoFileName)
-            try? fileManager.removeItem(at: photoURL)
-            packages.remove(at: index)
-            persistPackages()
+        let action = {
+            if let index = self.packages.firstIndex(where: { $0.id == id }) {
+                let package = self.packages[index]
+                self.photoCache.removeObject(forKey: package.photoFileName as NSString)
+                let photoURL = self.photosDirectoryURL.appendingPathComponent(package.photoFileName)
+                try? self.fileManager.removeItem(at: photoURL)
+                self.objectWillChange.send()
+                self.packages.remove(at: index)
+                self.persistPackages()
+            }
         }
+        if Thread.isMainThread { action() } else { DispatchQueue.main.async(execute: action) }
     }
 
     /// Batch permanently deletes packages from Trash and removes their photos from disk
     public func batchPermanentlyDelete(ids: Set<UUID>) {
         guard !ids.isEmpty else { return }
-        for pkg in packages where ids.contains(pkg.id) {
-            photoCache.removeObject(forKey: pkg.photoFileName as NSString)
-            let photoURL = photosDirectoryURL.appendingPathComponent(pkg.photoFileName)
-            try? fileManager.removeItem(at: photoURL)
+        let action = {
+            for pkg in self.packages where ids.contains(pkg.id) {
+                self.photoCache.removeObject(forKey: pkg.photoFileName as NSString)
+                let photoURL = self.photosDirectoryURL.appendingPathComponent(pkg.photoFileName)
+                try? self.fileManager.removeItem(at: photoURL)
+            }
+            self.objectWillChange.send()
+            self.packages.removeAll(where: { ids.contains($0.id) })
+            self.persistPackages()
         }
-        packages.removeAll(where: { ids.contains($0.id) })
-        persistPackages()
+        if Thread.isMainThread { action() } else { DispatchQueue.main.async(execute: action) }
     }
 
     /// Empties the entire Trash, permanently removing all trashed packages and their photos
     public func emptyTrash() {
-        let trashed = packages.filter { $0.isTrashed }
-        for pkg in trashed {
-            photoCache.removeObject(forKey: pkg.photoFileName as NSString)
-            let photoURL = photosDirectoryURL.appendingPathComponent(pkg.photoFileName)
-            try? fileManager.removeItem(at: photoURL)
+        let action = {
+            let trashed = self.packages.filter { $0.isTrashed }
+            for pkg in trashed {
+                self.photoCache.removeObject(forKey: pkg.photoFileName as NSString)
+                let photoURL = self.photosDirectoryURL.appendingPathComponent(pkg.photoFileName)
+                try? self.fileManager.removeItem(at: photoURL)
+            }
+            self.objectWillChange.send()
+            self.packages.removeAll(where: { $0.isTrashed })
+            self.persistPackages()
         }
-        packages.removeAll(where: { $0.isTrashed })
-        persistPackages()
+        if Thread.isMainThread { action() } else { DispatchQueue.main.async(execute: action) }
     }
 
     /// Automatically purges trashed packages older than 30 days

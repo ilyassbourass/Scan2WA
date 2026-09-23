@@ -9,6 +9,7 @@ public struct PackagesListView: View {
     @State private var searchQuery: String = ""
     @State private var selectedStatusFilter: DeliveryStatus? = nil // nil = "All"
     @State private var selectedPhotoForPreview: UIImage? = nil
+    @State private var previewTitle: String? = nil
     @State private var packageToEdit: PackageModel? = nil
     @State private var packageToDelete: PackageModel? = nil
     @State private var showDeleteConfirmation: Bool = false
@@ -206,7 +207,7 @@ public struct PackagesListView: View {
             .onTapGesture {
                 isSearchFocused = false
             }
-            .navigationTitle("Saved Packages")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -220,13 +221,63 @@ public struct PackagesListView: View {
                         .font(.system(size: 15, weight: .bold))
                         .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
                     } else {
-                        Text("\(packageManager.packages.count) \(packageManager.packages.count == 1 ? "package" : "packages")")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(.secondary)
+                        HStack(spacing: 12) {
+                            Button(action: {
+                                presentationMode.wrappedValue.dismiss()
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.gray)
+                            }
+
+                            // Trash Button with live count badge
+                            Button(action: {
+                                showTrashSheet = true
+                            }) {
+                                ZStack(alignment: .topTrailing) {
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 18))
+                                        .foregroundColor(packageManager.trashedPackages.isEmpty ? .gray : .red.opacity(0.9))
+
+                                    if !packageManager.trashedPackages.isEmpty {
+                                        Text("\(packageManager.trashedPackages.count)")
+                                            .font(.system(size: 9, weight: .bold))
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 4)
+                                            .padding(.vertical, 1)
+                                            .background(Color.red)
+                                            .clipShape(Capsule())
+                                            .offset(x: 8, y: -6)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
-                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .principal) {
+                    if isSelectionMode {
+                        Text("Select Items")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                    } else {
+                        HStack(spacing: 6) {
+                            Text("Packages")
+                                .font(.system(size: 17, weight: .bold))
+                                .foregroundColor(.white)
+
+                            Text("\(packageManager.packages.count)")
+                                .font(.system(size: 12, weight: .heavy, design: .rounded))
+                                .foregroundColor(.white.opacity(0.85))
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 2)
+                                .background(Color.white.opacity(0.15))
+                                .clipShape(Capsule())
+                        }
+                    }
+                }
+
+                ToolbarItem(placement: .navigationBarTrailing) {
                     if isSelectionMode {
                         Button(action: {
                             withAnimation {
@@ -244,62 +295,35 @@ public struct PackagesListView: View {
                                 .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
                         }
                     } else {
-                        if !filteredPackages.isEmpty {
+                        HStack(spacing: 10) {
+                            if !filteredPackages.isEmpty {
+                                Button(action: {
+                                    withAnimation {
+                                        isSelectionMode = true
+                                    }
+                                }) {
+                                    Text("Select")
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                                }
+                            }
+
+                            // Prominent "+ Add" button
                             Button(action: {
-                                withAnimation {
-                                    isSelectionMode = true
-                                }
+                                showAddPackageSheet = true
                             }) {
-                                Text("Select")
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
-                            }
-                        }
-
-                        Button(action: {
-                            showShortcutSheet = true
-                        }) {
-                            Image(systemName: "bolt.circle")
-                                .font(.system(size: 19))
-                                .foregroundColor(.orange)
-                        }
-
-                        Button(action: {
-                            showAddPackageSheet = true
-                        }) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 21, weight: .semibold))
-                                .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
-                        }
-
-                        // Trash Button with live count badge
-                        Button(action: {
-                            showTrashSheet = true
-                        }) {
-                            ZStack(alignment: .topTrailing) {
-                                Image(systemName: "trash")
-                                    .font(.system(size: 19))
-                                    .foregroundColor(packageManager.trashedPackages.isEmpty ? .gray : .red.opacity(0.9))
-
-                                if !packageManager.trashedPackages.isEmpty {
-                                    Text("\(packageManager.trashedPackages.count)")
-                                        .font(.system(size: 9, weight: .bold))
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 4)
-                                        .padding(.vertical, 1)
-                                        .background(Color.red)
-                                        .clipShape(Capsule())
-                                        .offset(x: 8, y: -6)
+                                HStack(spacing: 4) {
+                                    Image(systemName: "plus.circle.fill")
+                                        .font(.system(size: 14, weight: .bold))
+                                    Text("Add")
+                                        .font(.system(size: 13, weight: .bold))
                                 }
+                                .foregroundColor(.black)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color(red: 0.15, green: 0.78, blue: 0.35))
+                                .cornerRadius(14)
                             }
-                        }
-
-                        Button(action: {
-                            presentationMode.wrappedValue.dismiss()
-                        }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 20))
-                                .foregroundColor(.gray)
                         }
                     }
                 }
@@ -340,7 +364,7 @@ public struct PackagesListView: View {
                 set: { if !$0 { selectedPhotoForPreview = nil } }
             )) {
                 if let photo = selectedPhotoForPreview {
-                    PhotoPreviewModal(image: photo) {
+                    ZoomablePhotoPreviewModal(image: photo, title: previewTitle) {
                         selectedPhotoForPreview = nil
                     }
                 }
@@ -352,26 +376,6 @@ public struct PackagesListView: View {
                     onDismiss: {
                         showAddPackageSheet = false
                     }
-                )
-            }
-            .alert(isPresented: $showDeleteConfirmation) {
-                Alert(
-                    title: Text("Move to Trash?"),
-                    message: Text("This package for \(packageToDelete?.cleanNumber ?? "") will be moved to Trash. You can restore it anytime within 30 days."),
-                    primaryButton: .destructive(Text("Move to Trash")) {
-                        if let id = packageToDelete?.id {
-                            packageManager.moveToTrash(id: id)
-                            undoTrashedIDs = [id]
-                            let haptic = UINotificationFeedbackGenerator()
-                            haptic.notificationOccurred(.success)
-                            copiedBannerText = "Package moved to Trash"
-                            withAnimation { showCopiedBanner = true }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
-                                withAnimation { showCopiedBanner = false }
-                            }
-                        }
-                    },
-                    secondaryButton: .cancel()
                 )
             }
             .alert(isPresented: $showBatchDeleteAlert) {
@@ -389,7 +393,7 @@ public struct PackagesListView: View {
                         haptic.notificationOccurred(.success)
                         copiedBannerText = "Moved \(count) package\(count == 1 ? "" : "s") to Trash"
                         withAnimation { showCopiedBanner = true }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
                             withAnimation { showCopiedBanner = false }
                         }
                     },
@@ -425,6 +429,12 @@ public struct PackagesListView: View {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundColor(.gray)
                         .font(.system(size: 16))
+                }
+            } else {
+                Button(action: { showShortcutSheet = true }) {
+                    Image(systemName: "bolt.circle")
+                        .font(.system(size: 18))
+                        .foregroundColor(.orange)
                 }
             }
         }
@@ -552,6 +562,7 @@ public struct PackagesListView: View {
                             if isSelectionMode {
                                 toggleSelection(for: pkg.id)
                             } else {
+                                previewTitle = "\(pkg.cleanNumber) (#\(pkg.lastTwoDigits))"
                                 selectedPhotoForPreview = photo
                             }
                         }) {
@@ -612,16 +623,25 @@ public struct PackagesListView: View {
                                     }
 
                                     Button(role: .destructive, action: {
-                                        packageToDelete = pkg
-                                        showDeleteConfirmation = true
+                                        let id = pkg.id
+                                        packageManager.moveToTrash(id: id)
+                                        undoTrashedIDs = [id]
+                                        let haptic = UINotificationFeedbackGenerator()
+                                        haptic.notificationOccurred(.success)
+                                        copiedBannerText = "Package moved to Trash"
+                                        withAnimation { showCopiedBanner = true }
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+                                            withAnimation { showCopiedBanner = false }
+                                        }
                                     }) {
-                                        Label("Delete Package", systemImage: "trash")
+                                        Label("Move to Trash", systemImage: "trash")
                                     }
                                 } label: {
                                     Image(systemName: "ellipsis")
                                         .font(.system(size: 16, weight: .bold))
                                         .foregroundColor(.gray)
-                                        .frame(width: 28, height: 28)
+                                        .frame(width: 44, height: 44)
+                                        .contentShape(Rectangle())
                                 }
                             }
                         }
@@ -986,6 +1006,24 @@ fileprivate struct EditPackageSheet: View {
                                 .keyboardType(.URL)
                         }
 
+                        // Move to Trash Button
+                        Button(role: .destructive, action: {
+                            packageManager.moveToTrash(id: package.id)
+                            presentationMode.wrappedValue.dismiss()
+                        }) {
+                            HStack {
+                                Image(systemName: "trash")
+                                Text("Move to Trash")
+                            }
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.red)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.red.opacity(0.12))
+                            .cornerRadius(10)
+                        }
+                        .padding(.top, 12)
+
                         Spacer()
                     }
                     .padding(20)
@@ -1031,39 +1069,6 @@ fileprivate struct EditPackageSheet: View {
                 self.notesText = package.notes ?? ""
                 self.locationLinkText = package.locationLink ?? ""
                 self.selectedStatus = package.status
-            }
-        }
-    }
-}
-
-// MARK: - Fullscreen Photo Preview Modal
-fileprivate struct PhotoPreviewModal: View {
-    let image: UIImage
-    let onClose: () -> Void
-
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-
-            VStack {
-                HStack {
-                    Spacer()
-                    Button(action: onClose) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 30))
-                            .foregroundColor(.white.opacity(0.8))
-                            .padding(16)
-                    }
-                }
-
-                Spacer()
-
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                Spacer()
             }
         }
     }

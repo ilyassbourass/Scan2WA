@@ -9,8 +9,8 @@ public struct TrashView: View {
     @State private var showEmptyTrashAlert: Bool = false
     @State private var showBatchDeleteAlert: Bool = false
     @State private var packageToPermanentlyDelete: PackageModel? = nil
-    @State private var showSingleDeleteAlert: Bool = false
     @State private var selectedPhotoForPreview: UIImage? = nil
+    @State private var previewTitle: String? = nil
     @State private var toastBannerText: String = ""
     @State private var showToastBanner: Bool = false
 
@@ -245,18 +245,15 @@ public struct TrashView: View {
                     secondaryButton: .cancel()
                 )
             }
-            .alert(isPresented: $showSingleDeleteAlert) {
+            .alert(item: $packageToPermanentlyDelete) { pkg in
                 Alert(
                     title: Text("Delete Permanently?"),
-                    message: Text("Are you sure you want to permanently delete the package for \(packageToPermanentlyDelete?.cleanNumber ?? "")? This cannot be undone."),
+                    message: Text("Are you sure you want to permanently delete the package for \(pkg.cleanNumber)? This cannot be undone."),
                     primaryButton: .destructive(Text("Delete")) {
-                        if let id = packageToPermanentlyDelete?.id {
-                            packageManager.permanentlyDelete(id: id)
-                            packageToPermanentlyDelete = nil
-                            showToast("Package permanently deleted")
-                            let haptic = UINotificationFeedbackGenerator()
-                            haptic.notificationOccurred(.success)
-                        }
+                        packageManager.permanentlyDelete(id: pkg.id)
+                        showToast("Package permanently deleted")
+                        let haptic = UINotificationFeedbackGenerator()
+                        haptic.notificationOccurred(.success)
                     },
                     secondaryButton: .cancel()
                 )
@@ -266,7 +263,7 @@ public struct TrashView: View {
                 set: { if !$0 { selectedPhotoForPreview = nil } }
             )) {
                 if let photo = selectedPhotoForPreview {
-                    TrashPhotoPreviewModal(image: photo) {
+                    ZoomablePhotoPreviewModal(image: photo, title: previewTitle) {
                         selectedPhotoForPreview = nil
                     }
                 }
@@ -305,6 +302,7 @@ public struct TrashView: View {
                 if isSelectionMode {
                     toggleSelection(for: pkg.id)
                 } else if let img = packageManager.loadPhoto(fileName: pkg.photoFileName) {
+                    previewTitle = "\(pkg.cleanNumber) (#\(pkg.lastTwoDigits))"
                     selectedPhotoForPreview = img
                 }
             }) {
@@ -397,7 +395,6 @@ public struct TrashView: View {
                         // Permanently Delete Button
                         Button(action: {
                             packageToPermanentlyDelete = pkg
-                            showSingleDeleteAlert = true
                         }) {
                             HStack(spacing: 4) {
                                 Image(systemName: "trash.fill")
@@ -474,35 +471,5 @@ public struct TrashView: View {
             Spacer()
         }
         .padding()
-    }
-}
-
-// MARK: - Trash Photo Preview Modal
-fileprivate struct TrashPhotoPreviewModal: View {
-    let image: UIImage
-    let onDismiss: () -> Void
-
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-
-            VStack {
-                HStack {
-                    Spacer()
-                    Button(action: onDismiss) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 26))
-                            .foregroundColor(.white.opacity(0.8))
-                            .padding()
-                    }
-                }
-                Spacer()
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                Spacer()
-            }
-        }
     }
 }
