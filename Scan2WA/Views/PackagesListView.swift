@@ -956,230 +956,11 @@ fileprivate struct EditPackageSheet: View {
 
                 ScrollView {
                     VStack(spacing: 16) {
-                        // Package Photo Thumbnail & Quick Zoom
-                        if let photo = packagePhoto {
-                            HStack(spacing: 12) {
-                                Button(action: { showPhotoPreview = true }) {
-                                    ZStack(alignment: .bottomTrailing) {
-                                        Image(uiImage: photo)
-                                            .resizable()
-                                            .scaledToFill()
-                                            .frame(width: 64, height: 64)
-                                            .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                                            .font(.system(size: 8, weight: .bold))
-                                            .foregroundColor(.white)
-                                            .padding(3)
-                                            .background(Color.black.opacity(0.65))
-                                            .clipShape(Circle())
-                                            .padding(3)
-                                    }
-                                }
-                                .buttonStyle(PlainButtonStyle())
-
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Package Photo")
-                                        .font(.system(size: 13, weight: .bold))
-                                        .foregroundColor(.white)
-
-                                    Text("Tap photo to zoom and inspect the label")
-                                        .font(.system(size: 11))
-                                        .foregroundColor(.secondary)
-
-                                    if isAnalyzingPhoto {
-                                        HStack(spacing: 4) {
-                                            ProgressView()
-                                                .scaleEffect(0.6)
-                                            Text("Scanning for numbers...")
-                                                .font(.system(size: 10))
-                                                .foregroundColor(.orange)
-                                        }
-                                    }
-                                }
-
-                                Spacer()
-                            }
-                            .padding(10)
-                            .background(Color.white.opacity(0.06))
-                            .cornerRadius(12)
-                        }
-
-                        // Detected Numbers on the Package (Tap to Select)
-                        if !detectedNumbers.isEmpty {
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "text.viewfinder")
-                                        .font(.system(size: 11, weight: .bold))
-                                        .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
-                                    Text("NUMBERS FOUND ON PHOTO (TAP TO SELECT)")
-                                        .font(.system(size: 11, weight: .bold))
-                                        .foregroundColor(.secondary)
-                                }
-
-                                ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(spacing: 8) {
-                                        ForEach(detectedNumbers) { num in
-                                            Button(action: {
-                                                phoneNumberText = num.cleanNumber
-                                                let haptic = UIImpactFeedbackGenerator(style: .medium)
-                                                haptic.impactOccurred()
-                                            }) {
-                                                HStack(spacing: 5) {
-                                                    Image(systemName: "phone.fill")
-                                                        .font(.system(size: 10, weight: .bold))
-                                                        .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
-                                                    Text(num.cleanNumber)
-                                                        .font(.system(size: 13, weight: .bold, design: .monospaced))
-                                                    if phoneNumberText == num.cleanNumber {
-                                                        Image(systemName: "checkmark.circle.fill")
-                                                            .font(.system(size: 11))
-                                                            .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
-                                                    }
-                                                }
-                                                .padding(.horizontal, 10)
-                                                .padding(.vertical, 7)
-                                                .background(phoneNumberText == num.cleanNumber ? Color(red: 0.15, green: 0.78, blue: 0.35).opacity(0.22) : Color.white.opacity(0.08))
-                                                .foregroundColor(.white)
-                                                .cornerRadius(8)
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 8)
-                                                        .stroke(phoneNumberText == num.cleanNumber ? Color(red: 0.15, green: 0.78, blue: 0.35) : Color.white.opacity(0.12), lineWidth: 1)
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Phone Number / Last 2 Digits Input Field
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text("PHONE NUMBER OR LAST 2 DIGITS")
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundColor(.secondary)
-
-                                Spacer()
-
-                                Text("#\(effectiveLastTwoDigits)")
-                                    .font(.system(size: 12, weight: .black, design: .monospaced))
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(selectedStatus.color)
-                                    .foregroundColor(selectedStatus.textColorOnStatus)
-                                    .cornerRadius(5)
-                            }
-
-                            HStack {
-                                Image(systemName: "phone.fill")
-                                    .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
-                                    .font(.system(size: 14))
-
-                                TextField("e.g. 0612345678 or 73", text: $phoneNumberText)
-                                    .focused($isFieldFocused)
-                                    .foregroundColor(.white)
-                                    .font(.system(size: 15, weight: .bold, design: .monospaced))
-                                    .keyboardType(.numbersAndPunctuation)
-
-                                if !phoneNumberText.isEmpty {
-                                    Button(action: { phoneNumberText = "" }) {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .foregroundColor(.gray)
-                                            .font(.system(size: 15))
-                                    }
-                                }
-                            }
-                            .padding(12)
-                            .background(Color.white.opacity(0.08))
-                            .cornerRadius(10)
-                        }
-
-                        // Status Picker
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("STATUS")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(.secondary)
-
-                            HStack(spacing: 6) {
-                                ForEach(DeliveryStatus.allCases) { status in
-                                    Button(action: {
-                                        selectedStatus = status
-                                    }) {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: status.iconName)
-                                                .font(.system(size: 11, weight: .bold))
-                                            Text(status.rawValue)
-                                                .font(.system(size: 12, weight: .bold))
-                                                .lineLimit(1)
-                                                .minimumScaleFactor(0.8)
-                                        }
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 10)
-                                        .background(selectedStatus == status ? status.color : Color.white.opacity(0.08))
-                                        .foregroundColor(selectedStatus == status ? status.textColorOnStatus : .white)
-                                        .cornerRadius(10)
-                                    }
-                                }
-                            }
-                        }
-
-                        // Notes Field
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("NOTES")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(.secondary)
-                            TextField("Delivery instructions...", text: $notesText)
-                                .focused($isFieldFocused)
-                                .padding(12)
-                                .background(Color.white.opacity(0.08))
-                                .cornerRadius(10)
-                                .foregroundColor(.white)
-                        }
-
-                        // Location Link Field
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text("LOCATION LINK")
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundColor(.secondary)
-                                Spacer()
-                                Button("Paste") {
-                                    if let paste = UIPasteboard.general.string {
-                                        locationLinkText = paste
-                                    }
-                                }
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
-                            }
-
-                            TextField("Google Maps or Apple Maps URL...", text: $locationLinkText)
-                                .focused($isFieldFocused)
-                                .padding(12)
-                                .background(Color.white.opacity(0.08))
-                                .cornerRadius(10)
-                                .foregroundColor(.white)
-                                .keyboardType(.URL)
-                        }
-
-                        // Move to Trash Button
-                        Button(role: .destructive, action: {
-                            PackageManager.shared.moveToTrash(id: package.id)
-                            presentationMode.wrappedValue.dismiss()
-                        }) {
-                            HStack {
-                                Image(systemName: "trash")
-                                Text("Move to Trash")
-                            }
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.red)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color.red.opacity(0.12))
-                            .cornerRadius(10)
-                        }
-                        .padding(.top, 12)
-
+                        photoHeaderSection
+                        detectedNumbersSection
+                        phoneNumberInputSection
+                        statusPickerSection
+                        notesAndLocationSection
                         Spacer()
                     }
                     .padding(20)
@@ -1258,6 +1039,238 @@ fileprivate struct EditPackageSheet: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - Subviews
+    @ViewBuilder
+    private var photoHeaderSection: some View {
+        if let photo = packagePhoto {
+            HStack(spacing: 12) {
+                Button(action: { showPhotoPreview = true }) {
+                    ZStack(alignment: .bottomTrailing) {
+                        Image(uiImage: photo)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 64, height: 64)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(3)
+                            .background(Color.black.opacity(0.65))
+                            .clipShape(Circle())
+                            .padding(3)
+                    }
+                }
+                .buttonStyle(PlainButtonStyle())
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Package Photo")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.white)
+
+                    Text("Tap photo to zoom and inspect label")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+
+                    if isAnalyzingPhoto {
+                        HStack(spacing: 4) {
+                            ProgressView()
+                                .scaleEffect(0.6)
+                            Text("Scanning for numbers...")
+                                .font(.system(size: 10))
+                                .foregroundColor(.orange)
+                        }
+                    }
+                }
+
+                Spacer()
+            }
+            .padding(10)
+            .background(Color.white.opacity(0.06))
+            .cornerRadius(12)
+        }
+    }
+
+    @ViewBuilder
+    private var detectedNumbersSection: some View {
+        if !detectedNumbers.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "text.viewfinder")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                    Text("NUMBERS FOUND ON PHOTO (TAP TO SELECT)")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.secondary)
+                }
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(detectedNumbers) { num in
+                            Button(action: {
+                                phoneNumberText = num.cleanNumber
+                                let haptic = UIImpactFeedbackGenerator(style: .medium)
+                                haptic.impactOccurred()
+                            }) {
+                                HStack(spacing: 5) {
+                                    Image(systemName: "phone.fill")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                                    Text(num.cleanNumber)
+                                        .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                    if phoneNumberText == num.cleanNumber {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 11))
+                                            .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                                    }
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .background(phoneNumberText == num.cleanNumber ? Color(red: 0.15, green: 0.78, blue: 0.35).opacity(0.22) : Color.white.opacity(0.08))
+                                .foregroundColor(.white)
+                                .cornerRadius(8)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(phoneNumberText == num.cleanNumber ? Color(red: 0.15, green: 0.78, blue: 0.35) : Color.white.opacity(0.12), lineWidth: 1)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var phoneNumberInputSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("PHONE NUMBER OR LAST 2 DIGITS")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.secondary)
+
+                Spacer()
+
+                Text("#\(effectiveLastTwoDigits)")
+                    .font(.system(size: 12, weight: .black, design: .monospaced))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(selectedStatus.color)
+                    .foregroundColor(selectedStatus.textColorOnStatus)
+                    .cornerRadius(5)
+            }
+
+            HStack {
+                Image(systemName: "phone.fill")
+                    .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                    .font(.system(size: 14))
+
+                TextField("e.g. 0612345678 or 73", text: $phoneNumberText)
+                    .focused($isFieldFocused)
+                    .foregroundColor(.white)
+                    .font(.system(size: 15, weight: .bold, design: .monospaced))
+                    .keyboardType(.numbersAndPunctuation)
+
+                if !phoneNumberText.isEmpty {
+                    Button(action: { phoneNumberText = "" }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.gray)
+                            .font(.system(size: 15))
+                    }
+                }
+            }
+            .padding(12)
+            .background(Color.white.opacity(0.08))
+            .cornerRadius(10)
+        }
+    }
+
+    private var statusPickerSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("STATUS")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(.secondary)
+
+            HStack(spacing: 6) {
+                ForEach(DeliveryStatus.allCases) { status in
+                    Button(action: {
+                        selectedStatus = status
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: status.iconName)
+                                .font(.system(size: 11, weight: .bold))
+                            Text(status.rawValue)
+                                .font(.system(size: 12, weight: .bold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(selectedStatus == status ? status.color : Color.white.opacity(0.08))
+                        .foregroundColor(selectedStatus == status ? status.textColorOnStatus : .white)
+                        .cornerRadius(10)
+                    }
+                }
+            }
+        }
+    }
+
+    private var notesAndLocationSection: some View {
+        VStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("NOTES")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.secondary)
+                TextField("Delivery instructions...", text: $notesText)
+                    .focused($isFieldFocused)
+                    .padding(12)
+                    .background(Color.white.opacity(0.08))
+                    .cornerRadius(10)
+                    .foregroundColor(.white)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("LOCATION LINK")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Button("Paste") {
+                        if let paste = UIPasteboard.general.string {
+                            locationLinkText = paste
+                        }
+                    }
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                }
+
+                TextField("Google Maps or Apple Maps URL...", text: $locationLinkText)
+                    .focused($isFieldFocused)
+                    .padding(12)
+                    .background(Color.white.opacity(0.08))
+                    .cornerRadius(10)
+                    .foregroundColor(.white)
+                    .keyboardType(.URL)
+            }
+
+            Button(role: .destructive, action: {
+                PackageManager.shared.moveToTrash(id: package.id)
+                presentationMode.wrappedValue.dismiss()
+            }) {
+                HStack {
+                    Image(systemName: "trash")
+                    Text("Move to Trash")
+                }
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(.red)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(Color.red.opacity(0.12))
+                .cornerRadius(10)
+            }
+            .padding(.top, 4)
         }
     }
 }
