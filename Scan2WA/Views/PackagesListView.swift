@@ -1008,7 +1008,7 @@ fileprivate struct EditPackageSheet: View {
 
                         // Move to Trash Button
                         Button(role: .destructive, action: {
-                            packageManager.moveToTrash(id: package.id)
+                            PackageManager.shared.moveToTrash(id: package.id)
                             presentationMode.wrappedValue.dismiss()
                         }) {
                             HStack {
