@@ -1,14 +1,30 @@
 import SwiftUI
 
+// MARK: - Trash Active Alert Enum
+fileprivate enum TrashActiveAlert: Identifiable {
+    case emptyTrash
+    case batchDelete(count: Int, ids: Set<UUID>)
+    case singleDelete(package: PackageModel)
+
+    var id: String {
+        switch self {
+        case .emptyTrash:
+            return "emptyTrash"
+        case .batchDelete(let count, _):
+            return "batchDelete_\(count)"
+        case .singleDelete(let pkg):
+            return "singleDelete_\(pkg.id.uuidString)"
+        }
+    }
+}
+
 public struct TrashView: View {
     @ObservedObject private var packageManager = PackageManager.shared
     @Environment(\.presentationMode) private var presentationMode
 
     @State private var isSelectionMode: Bool = false
     @State private var selectedPackageIDs: Set<UUID> = []
-    @State private var showEmptyTrashAlert: Bool = false
-    @State private var showBatchDeleteAlert: Bool = false
-    @State private var packageToPermanentlyDelete: PackageModel? = nil
+    @State private var activeAlert: TrashActiveAlert? = nil
     @State private var selectedPhotoForPreview: UIImage? = nil
     @State private var previewTitle: String? = nil
     @State private var toastBannerText: String = ""
@@ -141,7 +157,7 @@ public struct TrashView: View {
 
                             // 2. Delete Selected Permanently
                             Button(action: {
-                                showBatchDeleteAlert = true
+                                activeAlert = .batchDelete(count: selectedPackageIDs.count, ids: selectedPackageIDs)
                             }) {
                                 HStack(spacing: 6) {
                                     Image(systemName: "trash.fill")
@@ -187,7 +203,7 @@ public struct TrashView: View {
                         .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
                     } else if !trashedPackages.isEmpty {
                         Button("Empty Trash") {
-                            showEmptyTrashAlert = true
+                            activeAlert = .emptyTrash
                         }
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.red)
@@ -216,47 +232,47 @@ public struct TrashView: View {
                     }
                 }
             }
-            .alert(isPresented: $showEmptyTrashAlert) {
-                Alert(
-                    title: Text("Empty Trash?"),
-                    message: Text("Are you sure you want to permanently delete all \(trashedPackages.count) package\(trashedPackages.count == 1 ? "" : "s") and their photos? This action cannot be undone."),
-                    primaryButton: .destructive(Text("Empty Trash")) {
-                        packageManager.emptyTrash()
-                        showToast("Trash emptied permanently")
-                        let haptic = UINotificationFeedbackGenerator()
-                        haptic.notificationOccurred(.success)
-                    },
-                    secondaryButton: .cancel()
-                )
-            }
-            .alert(isPresented: $showBatchDeleteAlert) {
-                Alert(
-                    title: Text("Delete \(selectedPackageIDs.count) Packages?"),
-                    message: Text("Are you sure you want to permanently delete the selected \(selectedPackageIDs.count) package\(selectedPackageIDs.count == 1 ? "" : "s") and their photos? This action cannot be undone."),
-                    primaryButton: .destructive(Text("Delete Permanently")) {
-                        let count = selectedPackageIDs.count
-                        packageManager.batchPermanentlyDelete(ids: selectedPackageIDs)
-                        selectedPackageIDs.removeAll()
-                        isSelectionMode = false
-                        showToast("Permanently deleted \(count) package\(count == 1 ? "" : "s")")
-                        let haptic = UINotificationFeedbackGenerator()
-                        haptic.notificationOccurred(.success)
-                    },
-                    secondaryButton: .cancel()
-                )
-            }
-            .alert(item: $packageToPermanentlyDelete) { pkg in
-                Alert(
-                    title: Text("Delete Permanently?"),
-                    message: Text("Are you sure you want to permanently delete the package for \(pkg.cleanNumber)? This cannot be undone."),
-                    primaryButton: .destructive(Text("Delete")) {
-                        packageManager.permanentlyDelete(id: pkg.id)
-                        showToast("Package permanently deleted")
-                        let haptic = UINotificationFeedbackGenerator()
-                        haptic.notificationOccurred(.success)
-                    },
-                    secondaryButton: .cancel()
-                )
+            .alert(item: $activeAlert) { alertType in
+                switch alertType {
+                case .emptyTrash:
+                    return Alert(
+                        title: Text("Empty Trash?"),
+                        message: Text("Are you sure you want to permanently delete all \(trashedPackages.count) package\(trashedPackages.count == 1 ? "" : "s") and their photos? This action cannot be undone."),
+                        primaryButton: .destructive(Text("Empty Trash")) {
+                            packageManager.emptyTrash()
+                            showToast("Trash emptied permanently")
+                            let haptic = UINotificationFeedbackGenerator()
+                            haptic.notificationOccurred(.success)
+                        },
+                        secondaryButton: .cancel()
+                    )
+                case .batchDelete(let count, let ids):
+                    return Alert(
+                        title: Text("Delete \(count) Packages?"),
+                        message: Text("Are you sure you want to permanently delete the selected \(count) package\(count == 1 ? "" : "s") and their photos? This action cannot be undone."),
+                        primaryButton: .destructive(Text("Delete Permanently")) {
+                            packageManager.batchPermanentlyDelete(ids: ids)
+                            selectedPackageIDs.removeAll()
+                            isSelectionMode = false
+                            showToast("Permanently deleted \(count) package\(count == 1 ? "" : "s")")
+                            let haptic = UINotificationFeedbackGenerator()
+                            haptic.notificationOccurred(.success)
+                        },
+                        secondaryButton: .cancel()
+                    )
+                case .singleDelete(let pkg):
+                    return Alert(
+                        title: Text("Delete Permanently?"),
+                        message: Text("Are you sure you want to permanently delete the package for \(pkg.cleanNumber)? This cannot be undone."),
+                        primaryButton: .destructive(Text("Delete")) {
+                            packageManager.permanentlyDelete(id: pkg.id)
+                            showToast("Package permanently deleted")
+                            let haptic = UINotificationFeedbackGenerator()
+                            haptic.notificationOccurred(.success)
+                        },
+                        secondaryButton: .cancel()
+                    )
+                }
             }
             .sheet(isPresented: Binding(
                 get: { selectedPhotoForPreview != nil },
@@ -391,10 +407,11 @@ public struct TrashView: View {
                             .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
                             .cornerRadius(8)
                         }
+                        .buttonStyle(BorderlessButtonStyle())
 
                         // Permanently Delete Button
                         Button(action: {
-                            packageToPermanentlyDelete = pkg
+                            activeAlert = .singleDelete(package: pkg)
                         }) {
                             HStack(spacing: 4) {
                                 Image(systemName: "trash.fill")
@@ -407,6 +424,7 @@ public struct TrashView: View {
                             .foregroundColor(.red)
                             .cornerRadius(8)
                         }
+                        .buttonStyle(BorderlessButtonStyle())
                     }
                     .padding(.top, 4)
                 }

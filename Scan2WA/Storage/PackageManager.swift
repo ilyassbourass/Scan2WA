@@ -113,12 +113,16 @@ public final class PackageManager: ObservableObject {
         return newPackage
     }
 
-    /// Updates an existing package (e.g. notes, location link, or status)
+    /// Updates an existing package (e.g. phone number, notes, location link, or status)
     public func updatePackage(_ package: PackageModel) {
-        if let index = packages.firstIndex(where: { $0.id == package.id }) {
-            packages[index] = package
-            persistPackages()
+        let action = {
+            if let index = self.packages.firstIndex(where: { $0.id == package.id }) {
+                self.objectWillChange.send()
+                self.packages[index] = package
+                self.persistPackages()
+            }
         }
+        if Thread.isMainThread { action() } else { DispatchQueue.main.async(execute: action) }
     }
 
     /// Quickly updates the delivery status of a package

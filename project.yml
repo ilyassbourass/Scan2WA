@@ -18,8 +18,8 @@ targets:
         CFBundleExecutable: "Scan2WA"
         CFBundleIdentifier: "com.ilyassbourass.Scan2WA"
         CFBundleDevelopmentRegion: "en"
-        CFBundleShortVersionString: "1.11.1"
-        CFBundleVersion: "1111"
+        CFBundleShortVersionString: "1.11.2"
+        CFBundleVersion: "1112"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

@@ -619,7 +619,7 @@ public struct PackagesListView: View {
                                 // Menu button for edit/delete
                                 Menu {
                                     Button(action: { packageToEdit = pkg }) {
-                                        Label("Edit Notes, Status & Location", systemImage: "pencil")
+                                        Label("Edit Number, Status & Details", systemImage: "pencil")
                                     }
 
                                     Button(role: .destructive, action: {
@@ -926,11 +926,28 @@ public struct PackagesListView: View {
 fileprivate struct EditPackageSheet: View {
     @State var package: PackageModel
     @Environment(\.presentationMode) private var presentationMode
+    @AppStorage("defaultCountryPrefix") private var defaultCountryPrefix: String = "+212"
+
+    @State private var phoneNumberText: String = ""
     @State private var notesText: String = ""
     @State private var locationLinkText: String = ""
     @State private var selectedStatus: DeliveryStatus = .livre
 
+    // Vision OCR detected numbers from existing package photo
+    @State private var detectedNumbers: [RecognizedNumber] = []
+    @State private var isAnalyzingPhoto: Bool = false
+    @State private var packagePhoto: UIImage? = nil
+    @State private var showPhotoPreview: Bool = false
+
     @FocusState private var isFieldFocused: Bool
+
+    private var effectiveLastTwoDigits: String {
+        let digits = phoneNumberText.filter { $0.isNumber }
+        if digits.count >= 2 {
+            return String(digits.suffix(2))
+        }
+        return digits.isEmpty ? "--" : digits
+    }
 
     var body: some View {
         NavigationView {
@@ -939,6 +956,145 @@ fileprivate struct EditPackageSheet: View {
 
                 ScrollView {
                     VStack(spacing: 16) {
+                        // Package Photo Thumbnail & Quick Zoom
+                        if let photo = packagePhoto {
+                            HStack(spacing: 12) {
+                                Button(action: { showPhotoPreview = true }) {
+                                    ZStack(alignment: .bottomTrailing) {
+                                        Image(uiImage: photo)
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 64, height: 64)
+                                            .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                            .font(.system(size: 8, weight: .bold))
+                                            .foregroundColor(.white)
+                                            .padding(3)
+                                            .background(Color.black.opacity(0.65))
+                                            .clipShape(Circle())
+                                            .padding(3)
+                                    }
+                                }
+                                .buttonStyle(PlainButtonStyle())
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Package Photo")
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundColor(.white)
+
+                                    Text("Tap photo to zoom and inspect the label")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.secondary)
+
+                                    if isAnalyzingPhoto {
+                                        HStack(spacing: 4) {
+                                            ProgressView()
+                                                .scaleEffect(0.6)
+                                            Text("Scanning for numbers...")
+                                                .font(.system(size: 10))
+                                                .foregroundColor(.orange)
+                                        }
+                                    }
+                                }
+
+                                Spacer()
+                            }
+                            .padding(10)
+                            .background(Color.white.opacity(0.06))
+                            .cornerRadius(12)
+                        }
+
+                        // Detected Numbers on the Package (Tap to Select)
+                        if !detectedNumbers.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "text.viewfinder")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                                    Text("NUMBERS FOUND ON PHOTO (TAP TO SELECT)")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(.secondary)
+                                }
+
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 8) {
+                                        ForEach(detectedNumbers) { num in
+                                            Button(action: {
+                                                phoneNumberText = num.cleanNumber
+                                                let haptic = UIImpactFeedbackGenerator(style: .medium)
+                                                haptic.impactOccurred()
+                                            }) {
+                                                HStack(spacing: 5) {
+                                                    Image(systemName: "phone.fill")
+                                                        .font(.system(size: 10, weight: .bold))
+                                                        .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                                                    Text(num.cleanNumber)
+                                                        .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                                    if phoneNumberText == num.cleanNumber {
+                                                        Image(systemName: "checkmark.circle.fill")
+                                                            .font(.system(size: 11))
+                                                            .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                                                    }
+                                                }
+                                                .padding(.horizontal, 10)
+                                                .padding(.vertical, 7)
+                                                .background(phoneNumberText == num.cleanNumber ? Color(red: 0.15, green: 0.78, blue: 0.35).opacity(0.22) : Color.white.opacity(0.08))
+                                                .foregroundColor(.white)
+                                                .cornerRadius(8)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 8)
+                                                        .stroke(phoneNumberText == num.cleanNumber ? Color(red: 0.15, green: 0.78, blue: 0.35) : Color.white.opacity(0.12), lineWidth: 1)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Phone Number / Last 2 Digits Input Field
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text("PHONE NUMBER OR LAST 2 DIGITS")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.secondary)
+
+                                Spacer()
+
+                                Text("#\(effectiveLastTwoDigits)")
+                                    .font(.system(size: 12, weight: .black, design: .monospaced))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(selectedStatus.color)
+                                    .foregroundColor(selectedStatus.textColorOnStatus)
+                                    .cornerRadius(5)
+                            }
+
+                            HStack {
+                                Image(systemName: "phone.fill")
+                                    .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
+                                    .font(.system(size: 14))
+
+                                TextField("e.g. 0612345678 or 73", text: $phoneNumberText)
+                                    .focused($isFieldFocused)
+                                    .foregroundColor(.white)
+                                    .font(.system(size: 15, weight: .bold, design: .monospaced))
+                                    .keyboardType(.numbersAndPunctuation)
+
+                                if !phoneNumberText.isEmpty {
+                                    Button(action: { phoneNumberText = "" }) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundColor(.gray)
+                                            .font(.system(size: 15))
+                                    }
+                                }
+                            }
+                            .padding(12)
+                            .background(Color.white.opacity(0.08))
+                            .cornerRadius(10)
+                        }
+
                         // Status Picker
                         VStack(alignment: .leading, spacing: 8) {
                             Text("STATUS")
@@ -1034,7 +1190,7 @@ fileprivate struct EditPackageSheet: View {
             .onTapGesture {
                 isFieldFocused = false
             }
-            .navigationTitle("Edit Package Details")
+            .navigationTitle("Edit Package")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -1046,6 +1202,20 @@ fileprivate struct EditPackageSheet: View {
 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
+                        let trimmed = phoneNumberText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty {
+                            package.cleanNumber = trimmed
+                            let digits = trimmed.filter { $0.isNumber }
+                            if digits.count >= 2 {
+                                package.lastTwoDigits = String(digits.suffix(2))
+                            } else {
+                                package.lastTwoDigits = digits.isEmpty ? "--" : digits
+                            }
+                            package.phoneNumber = PhoneNumberParser.shared.prepareForWhatsApp(
+                                cleanNumber: trimmed,
+                                defaultCountryPrefix: defaultCountryPrefix
+                            )
+                        }
                         package.notes = notesText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : notesText
                         package.locationLink = locationLinkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : locationLinkText
                         package.status = selectedStatus
@@ -1054,6 +1224,7 @@ fileprivate struct EditPackageSheet: View {
                     }
                     .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
                     .font(.headline)
+                    .disabled(phoneNumberText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
 
                 ToolbarItemGroup(placement: .keyboard) {
@@ -1065,10 +1236,27 @@ fileprivate struct EditPackageSheet: View {
                     .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
                 }
             }
+            .sheet(isPresented: $showPhotoPreview) {
+                if let img = packagePhoto {
+                    ZoomablePhotoPreviewModal(image: img, title: "\(phoneNumberText) (#\(effectiveLastTwoDigits))") {
+                        showPhotoPreview = false
+                    }
+                }
+            }
             .onAppear {
+                self.phoneNumberText = package.cleanNumber
                 self.notesText = package.notes ?? ""
                 self.locationLinkText = package.locationLink ?? ""
                 self.selectedStatus = package.status
+
+                if let photo = PackageManager.shared.loadPhoto(fileName: package.photoFileName) {
+                    self.packagePhoto = photo
+                    self.isAnalyzingPhoto = true
+                    VisionTextRecognizer.shared.processImage(photo) { results in
+                        self.detectedNumbers = results
+                        self.isAnalyzingPhoto = false
+                    }
+                }
             }
         }
     }
