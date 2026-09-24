@@ -125,6 +125,29 @@ public final class PackageManager: ObservableObject {
         if Thread.isMainThread { action() } else { DispatchQueue.main.async(execute: action) }
     }
 
+    /// Updates details of an existing package in batch mode without creating duplicates
+    public func updatePackageBatch(
+        id: UUID,
+        phoneNumber: String,
+        cleanNumber: String,
+        notes: String?,
+        locationLink: String?,
+        status: DeliveryStatus
+    ) {
+        let action = {
+            if let index = self.packages.firstIndex(where: { $0.id == id }) {
+                self.objectWillChange.send()
+                self.packages[index].phoneNumber = phoneNumber
+                self.packages[index].cleanNumber = cleanNumber
+                self.packages[index].notes = (notes?.isEmpty == true) ? nil : notes
+                self.packages[index].locationLink = (locationLink?.isEmpty == true) ? nil : locationLink
+                self.packages[index].status = status
+                self.persistPackages()
+            }
+        }
+        if Thread.isMainThread { action() } else { DispatchQueue.main.async(execute: action) }
+    }
+
     /// Quickly updates the delivery status of a package
     public func updateStatus(id: UUID, status: DeliveryStatus) {
         let action = {

@@ -1213,17 +1213,10 @@ fileprivate struct EditPackageSheet: View {
 
     private var notesAndLocationSection: some View {
         VStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("NOTES")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.secondary)
-                TextField("Delivery instructions...", text: $notesText)
-                    .focused($isFieldFocused)
-                    .padding(12)
-                    .background(Color.white.opacity(0.08))
-                    .cornerRadius(10)
-                    .foregroundColor(.white)
-            }
+            QuickNumberNotesPicker(
+                notesText: $notesText,
+                placeholder: "Delivery instructions..."
+            )
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack {

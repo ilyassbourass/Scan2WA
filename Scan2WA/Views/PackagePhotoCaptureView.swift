@@ -28,6 +28,7 @@ public struct BatchPackageItem: Identifiable {
     public var locationLinkText: String = ""
     public var selectedStatus: DeliveryStatus = .confirme
     public var isSaved: Bool = false
+    public var savedPackageId: UUID? = nil
 
     public var effectiveLastTwoDigits: String {
         let digits = selectedNumberString.filter { $0.isNumber }
@@ -74,7 +75,6 @@ public struct PackagePhotoCaptureView: View {
     @State private var showShutterFlash: Bool = false
 
     // Duplicate Warning States
-    @State private var showDuplicateWarning: Bool = false
     @State private var duplicateExistingPackage: PackageModel? = nil
     @State private var isDuplicateBatchItem: Bool = false
 
@@ -199,35 +199,33 @@ public struct PackagePhotoCaptureView: View {
                 }
             }
         }
-        .sheet(isPresented: $showDuplicateWarning) {
-            if let duplicate = duplicateExistingPackage {
-                DuplicateWarningSheet(
-                    existingPackage: duplicate,
-                    newNumber: isDuplicateBatchItem ? (currentBatchIndex < batchItems.count ? batchItems[currentBatchIndex].selectedNumberString : "") : selectedNumberString,
-                    newImage: isDuplicateBatchItem ? (currentBatchIndex < batchItems.count ? batchItems[currentBatchIndex].image : nil) : capturedImage,
-                    onSaveAnyway: {
-                        showDuplicateWarning = false
-                        if isDuplicateBatchItem {
-                            executeSaveCurrentBatchPackageAction()
-                        } else {
-                            executeSaveSinglePackageAction()
-                        }
-                    },
-                    onDelete: {
-                        showDuplicateWarning = false
-                        if isDuplicateBatchItem {
-                            deleteCurrentBatchItem()
-                        } else {
-                            capturedImage = nil
-                            selectedNumberString = ""
-                            onDismiss()
-                        }
-                    },
-                    onCancel: {
-                        showDuplicateWarning = false
+        .sheet(item: $duplicateExistingPackage) { duplicate in
+            DuplicateWarningSheet(
+                existingPackage: duplicate,
+                newNumber: isDuplicateBatchItem ? (currentBatchIndex < batchItems.count ? batchItems[currentBatchIndex].selectedNumberString : "") : selectedNumberString,
+                newImage: isDuplicateBatchItem ? (currentBatchIndex < batchItems.count ? batchItems[currentBatchIndex].image : nil) : capturedImage,
+                onSaveAnyway: {
+                    duplicateExistingPackage = nil
+                    if isDuplicateBatchItem {
+                        executeSaveCurrentBatchPackageAction()
+                    } else {
+                        executeSaveSinglePackageAction()
                     }
-                )
-            }
+                },
+                onDelete: {
+                    duplicateExistingPackage = nil
+                    if isDuplicateBatchItem {
+                        deleteCurrentBatchItem()
+                    } else {
+                        capturedImage = nil
+                        selectedNumberString = ""
+                        onDismiss()
+                    }
+                },
+                onCancel: {
+                    duplicateExistingPackage = nil
+                }
+            )
         }
     }
 
@@ -249,7 +247,8 @@ public struct PackagePhotoCaptureView: View {
 
     // MARK: - Batch Item Helper
     private func addBatchItem(image: UIImage) {
-        let newItem = BatchPackageItem(image: image)
+        var newItem = BatchPackageItem(image: image)
+        newItem.notesText = "\(batchItems.count + 1)"
         batchItems.append(newItem)
         let itemIndex = batchItems.count - 1
 
@@ -634,20 +633,11 @@ public struct PackagePhotoCaptureView: View {
                         }
                     }
 
-                    // Notes input
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("NOTES (OPTIONAL)")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.secondary)
-
-                        TextField("e.g., Apt 4, 250 DH COD, leave with concierge", text: $notesText)
-                            .focused($isInputFocused)
-                            .padding(12)
-                            .background(Color.white.opacity(0.08))
-                            .cornerRadius(10)
-                            .foregroundColor(.white)
-                            .font(.system(size: 14))
-                    }
+                    // Notes input with 1-tap quick number chips
+                    QuickNumberNotesPicker(
+                        notesText: $notesText,
+                        placeholder: "e.g., Apt 4, 250 DH COD, leave with concierge"
+                    )
 
                     // Location Link input
                     VStack(alignment: .leading, spacing: 6) {
@@ -743,10 +733,12 @@ public struct PackagePhotoCaptureView: View {
     }
 
     // MARK: - Multi-Batch Review View
+    @ViewBuilder
     private var batchReviewView: some View {
-        let currentItem = batchItems[currentBatchIndex]
+        if currentBatchIndex < batchItems.count && !batchItems.isEmpty {
+            let currentItem = batchItems[currentBatchIndex]
 
-        return ScrollView {
+            ScrollView {
             VStack(spacing: 16) {
                 // Top Batch Bar
                 HStack {
@@ -946,23 +938,14 @@ public struct PackagePhotoCaptureView: View {
                         }
                     }
 
-                    // Notes input
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("NOTES (OPTIONAL)")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.secondary)
-
-                        TextField("e.g., Apt 4, 250 DH COD, leave with concierge", text: Binding(
+                    // Notes input with 1-tap quick number chips
+                    QuickNumberNotesPicker(
+                        notesText: Binding(
                             get: { batchItems[currentBatchIndex].notesText },
                             set: { batchItems[currentBatchIndex].notesText = $0 }
-                        ))
-                        .focused($isInputFocused)
-                        .padding(12)
-                        .background(Color.white.opacity(0.08))
-                        .cornerRadius(10)
-                        .foregroundColor(.white)
-                        .font(.system(size: 14))
-                    }
+                        ),
+                        placeholder: "e.g., Apt 4, 250 DH COD, leave with concierge"
+                    )
 
                     // Location Link input
                     VStack(alignment: .leading, spacing: 6) {
@@ -1060,11 +1043,16 @@ public struct PackagePhotoCaptureView: View {
                 .foregroundColor(Color(red: 0.15, green: 0.78, blue: 0.35))
             }
         }
+        }
     }
 
     // MARK: - Actions
     private func deleteCurrentBatchItem() {
         guard currentBatchIndex < batchItems.count else { return }
+        let item = batchItems[currentBatchIndex]
+        if let savedId = item.savedPackageId {
+            PackageManager.shared.permanentlyDeletePackage(id: savedId)
+        }
         batchItems.remove(at: currentBatchIndex)
         if batchItems.isEmpty {
             withAnimation {
@@ -1083,14 +1071,15 @@ public struct PackagePhotoCaptureView: View {
         let clean = item.selectedNumberString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
 
-        // Duplicate check in active packages
+        // Duplicate check in active packages (exclude itself if already saved in this session)
         if let duplicate = PackageManager.shared.findDuplicate(for: clean) {
-            self.duplicateExistingPackage = duplicate
-            self.isDuplicateBatchItem = true
-            self.showDuplicateWarning = true
-            let haptic = UINotificationFeedbackGenerator()
-            haptic.notificationOccurred(.warning)
-            return
+            if duplicate.id != item.savedPackageId {
+                self.duplicateExistingPackage = duplicate
+                self.isDuplicateBatchItem = true
+                let haptic = UINotificationFeedbackGenerator()
+                haptic.notificationOccurred(.warning)
+                return
+            }
         }
 
         executeSaveCurrentBatchPackageAction()
@@ -1102,14 +1091,28 @@ public struct PackagePhotoCaptureView: View {
         let clean = item.selectedNumberString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
 
-        _ = PackageManager.shared.savePackage(
-            phoneNumber: clean,
-            cleanNumber: clean,
-            image: item.image,
-            locationLink: item.locationLinkText,
-            notes: item.notesText,
-            status: item.selectedStatus
-        )
+        if let existingId = item.savedPackageId {
+            // Already saved earlier in this session -> Update it in-place!
+            PackageManager.shared.updatePackageBatch(
+                id: existingId,
+                phoneNumber: clean,
+                cleanNumber: clean,
+                notes: item.notesText,
+                locationLink: item.locationLinkText,
+                status: item.selectedStatus
+            )
+        } else {
+            // First time saving this batch item -> Create it!
+            let saved = PackageManager.shared.savePackage(
+                phoneNumber: clean,
+                cleanNumber: clean,
+                image: item.image,
+                locationLink: item.locationLinkText,
+                notes: item.notesText,
+                status: item.selectedStatus
+            )
+            batchItems[currentBatchIndex].savedPackageId = saved.id
+        }
 
         batchItems[currentBatchIndex].isSaved = true
         let generator = UINotificationFeedbackGenerator()
@@ -1141,7 +1144,6 @@ public struct PackagePhotoCaptureView: View {
         if let duplicate = PackageManager.shared.findDuplicate(for: clean) {
             self.duplicateExistingPackage = duplicate
             self.isDuplicateBatchItem = false
-            self.showDuplicateWarning = true
             let haptic = UINotificationFeedbackGenerator()
             haptic.notificationOccurred(.warning)
             return

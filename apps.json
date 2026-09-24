@@ -8,10 +8,10 @@
       "name": "Scan2WA",
       "bundleIdentifier": "com.ilyassbourass.Scan2WA",
       "developerName": "Ilyass Bourass",
-      "version": "1.11.3",
-      "versionDate": "2026-09-24T14:08:38Z",
-      "versionDescription": "Scan2WA v1.11.3 update with direct SideStore support and instant packaging.",
-      "downloadURL": "https://github.com/ilyassbourass/Scan2WA/releases/download/v1.11.3/Scan2WA.ipa",
+      "version": "1.11.4",
+      "versionDate": "2026-09-24T14:42:13Z",
+      "versionDescription": "Scan2WA v1.11.4 update with direct SideStore support and instant packaging.",
+      "downloadURL": "https://github.com/ilyassbourass/Scan2WA/releases/download/v1.11.4/Scan2WA.ipa",
       "localizedDescription": "Scan delivery package labels, auto-detect Moroccan phone numbers via Apple Vision OCR, track delivery statuses, and open WhatsApp directly.",
       "iconURL": "https://raw.githubusercontent.com/ilyassbourass/Scan2WA/main/Scan2WA/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png",
       "tintColor": "25D366",
@@ -19,6 +19,13 @@
       "subtitle": "Delivery package scanner & WhatsApp organizer",
       "appID": "com.ilyassbourass.Scan2WA",
       "versions": [
+        {
+          "version": "1.11.4",
+          "date": "2026-09-24T14:42:13Z",
+          "downloadURL": "https://github.com/ilyassbourass/Scan2WA/releases/download/v1.11.4/Scan2WA.ipa",
+          "localizedDescription": "Scan2WA v1.11.4 update with direct SideStore support and instant packaging.",
+          "size": 957243
+        },
         {
           "version": "1.11.3",
           "date": "2026-09-24T14:08:38Z",
