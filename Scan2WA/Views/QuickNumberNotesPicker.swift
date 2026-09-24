@@ -115,7 +115,8 @@ public struct QuickNumberNotesPicker: View {
                         .font(.system(size: 9, weight: .bold))
                 }
             }
-            .frame(minWidth: 36, height: 32)
+            .frame(height: 32)
+            .frame(minWidth: 36)
             .padding(.horizontal, 6)
             .background(isSelected ? Color(red: 0.15, green: 0.78, blue: 0.35) : Color.white.opacity(0.1))
             .foregroundColor(isSelected ? .black : .white)
