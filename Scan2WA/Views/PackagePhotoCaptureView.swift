@@ -1051,7 +1051,7 @@ public struct PackagePhotoCaptureView: View {
         guard currentBatchIndex < batchItems.count else { return }
         let item = batchItems[currentBatchIndex]
         if let savedId = item.savedPackageId {
-            PackageManager.shared.permanentlyDeletePackage(id: savedId)
+            PackageManager.shared.permanentlyDelete(id: savedId)
         }
         batchItems.remove(at: currentBatchIndex)
         if batchItems.isEmpty {
@@ -1103,15 +1103,16 @@ public struct PackagePhotoCaptureView: View {
             )
         } else {
             // First time saving this batch item -> Create it!
-            let saved = PackageManager.shared.savePackage(
+            if let saved = PackageManager.shared.savePackage(
                 phoneNumber: clean,
                 cleanNumber: clean,
                 image: item.image,
                 locationLink: item.locationLinkText,
                 notes: item.notesText,
                 status: item.selectedStatus
-            )
-            batchItems[currentBatchIndex].savedPackageId = saved.id
+            ) {
+                batchItems[currentBatchIndex].savedPackageId = saved.id
+            }
         }
 
         batchItems[currentBatchIndex].isSaved = true
