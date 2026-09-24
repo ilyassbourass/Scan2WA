@@ -110,6 +110,73 @@ public struct SettingsSheetView: View {
                     }
                 }
 
+                Section(
+                    header: Text("SideStore Direct Updates"),
+                    footer: Text("Make sure SideStore VPN is connected before tapping update. SideStore will download, sign, and install the latest release directly from GitHub.")
+                ) {
+                    HStack {
+                        Text("Current Version")
+                        Spacer()
+                        Text(currentVersionDisplay)
+                            .foregroundColor(.secondary)
+                    }
+
+                    Button(action: {
+                        let directInstallURL = "sidestore://install?url=https://github.com/ilyassbourass/Scan2WA/releases/latest/download/Scan2WA.ipa"
+                        if let url = URL(string: directInstallURL) {
+                            UIApplication.shared.open(url)
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .foregroundColor(.green)
+                            Text("1-Click Update via SideStore")
+                                .fontWeight(.semibold)
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Image(systemName: "arrow.up.right.square")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    Button(action: {
+                        let sourceURL = "sidestore://source?url=https://raw.githubusercontent.com/ilyassbourass/Scan2WA/main/apps.json"
+                        if let url = URL(string: sourceURL) {
+                            UIApplication.shared.open(url)
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "plus.app.fill")
+                                .foregroundColor(.blue)
+                            Text("Add Scan2WA to SideStore Sources")
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Image(systemName: "arrow.up.right.square")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    Button(action: {
+                        let liveContainerURL = "livecontainer://install?url=https://github.com/ilyassbourass/Scan2WA/releases/latest/download/Scan2WA.ipa"
+                        if let url = URL(string: liveContainerURL) {
+                            UIApplication.shared.open(url)
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "shippingbox.fill")
+                                .foregroundColor(.orange)
+                            Text("1-Click Update via LiveContainer")
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Image(systemName: "arrow.up.right.square")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+
                 Section(footer: Text("If a scanned number starts with local digits (e.g. 06...), this prefix will be automatically prepended so WhatsApp can start the chat directly.")) {
                     EmptyView()
                 }
@@ -117,5 +184,11 @@ public struct SettingsSheetView: View {
             .navigationTitle("Scanner Settings")
             .navigationBarItems(trailing: Button("Done") { dismiss() })
         }
+    }
+
+    private var currentVersionDisplay: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.11.2"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1112"
+        return "v\(version) (\(build))"
     }
 }

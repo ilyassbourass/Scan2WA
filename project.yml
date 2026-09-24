@@ -18,8 +18,8 @@ targets:
         CFBundleExecutable: "Scan2WA"
         CFBundleIdentifier: "com.ilyassbourass.Scan2WA"
         CFBundleDevelopmentRegion: "en"
-        CFBundleShortVersionString: "1.11.2"
-        CFBundleVersion: "1112"
+        CFBundleShortVersionString: "1.11.3"
+        CFBundleVersion: "1113"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -31,6 +31,8 @@ targets:
           - whatsapp-business
           - whatsapp
           - whatsapp-consumer
+          - sidestore
+          - livecontainer
         CFBundleURLTypes:
           - CFBundleTypeRole: Editor
             CFBundleURLName: com.ilyassbourass.Scan2WA
