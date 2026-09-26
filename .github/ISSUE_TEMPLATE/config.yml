@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📱 LiveContainer Source URL
+    url: https://raw.githubusercontent.com/ilyassbourass/Scan2WA/main/apps.json
+    about: Add Scan2WA directly to your LiveContainer sources
+  - name: 💬 Feature Discussions & Feedback
+    url: https://github.com/ilyassbourass/Scan2WA/issues
+    about: Share ideas, device compatibility reports, or ask questions

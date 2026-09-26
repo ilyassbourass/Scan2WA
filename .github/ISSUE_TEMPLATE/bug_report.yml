@@ -1,0 +1,57 @@
+name: 🐛 Bug Report
+description: Create a report to help us improve Scan2WA
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please ensure you have tested with the latest release IPA.
+  - type: input
+    id: version
+    attributes:
+      label: Scan2WA Version
+      description: What version of Scan2WA are you running? (e.g., v1.11.4)
+      placeholder: v1.11.4
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device & iOS Version
+      description: Model and iOS version (e.g., iPhone 15 Pro Max, iOS 17.5.1)
+      placeholder: iPhone 15 Pro Max, iOS 17.5
+    validations:
+      required: true
+  - type: dropdown
+    id: installation_method
+    attributes:
+      label: Installation Method
+      options:
+        - LiveContainer
+        - TrollStore
+        - AltStore
+        - SideStore
+        - Xcode / Self-Compiled
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: When pointing camera at...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or Logs
+      description: Drag and drop screenshots or paste crash logs if available.
